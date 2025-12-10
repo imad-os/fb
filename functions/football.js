@@ -1,12 +1,9 @@
 "use strict";
 
-// You can use 'axios' or native 'fetch' (Node 18+). 
-// If using older Node, run: npm install axios
 const axios = require('axios'); 
 
 // -----------------------------------------------------------
 // CONFIGURATION
-// Get your free key from: https://dashboard.api-football.com/
 // -----------------------------------------------------------
 const API_KEY = "9e9fb80bd8d4c5c226e8a7f69375995a"; 
 const BASE_URL = "https://v3.football.api-sports.io";
@@ -19,52 +16,31 @@ const HEADERS = {
 const FootballService = {
 
     /**
-     * Helper to make requests
+     * Generic Fetcher (The method index.js was looking for)
+     * @param {string} endpoint - e.g., "fixtures", "/leagues"
+     * @param {object} params - Query parameters
      */
-    _request: async function(endpoint, params = {}) {
+    fetchData: async function(endpoint, params = {}) {
+        // Ensure endpoint starts with '/'
+        const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+
         try {
-            const response = await axios.get(`${BASE_URL}${endpoint}`, {
+            const response = await axios.get(`${BASE_URL}${cleanEndpoint}`, {
                 headers: HEADERS,
                 params: params
             });
             return response.data;
         } catch (error) {
-            console.error(`Football API Error [${endpoint}]:`, error.message);
-            throw new Error("Failed to fetch data from Football Provider");
+            console.error(`Football API Error [${cleanEndpoint}]:`, error.message);
+            // Return a structured error so the client handles it gracefully
+            throw new Error(error.response?.data?.message || "Failed to fetch data from Football Provider");
         }
     },
 
-    /**
-     * Get Live Matches
-     */
+    // (Optional) Keep these if you need them for other server-side logic, 
+    // but fetchData covers most needs now.
     getLiveMatches: async function() {
-        // "live=all" gets all currently playing matches
-        return await this._request('/fixtures', { live: 'all' });
-    },
-
-    /**
-     * Get Matches by Date (Fixtures)
-     * date format: "YYYY-MM-DD"
-     */
-    getFixturesByDate: async function(date) {
-        return await this._request('/fixtures', { date: date });
-    },
-
-    /**
-     * Get Leagues List
-     */
-    getLeagues: async function() {
-        return await this._request('/leagues');
-    },
-
-    /**
-     * Get Standings for a specific league and season
-     */
-    getStandings: async function(leagueId, season) {
-        return await this._request('/standings', { 
-            league: leagueId, 
-            season: season 
-        });
+        return this.fetchData('/fixtures', { live: 'all' });
     }
 };
 
