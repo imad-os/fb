@@ -5,7 +5,7 @@ const SubtitleFetcher = {
     domain: "iptv-subtitle.geekspro.us",
     
     // Encoded replacement domain
-    targetDomainEncoded: 'ZXhvYXBwLnR2', // "exoapp.tv"
+    targetDomainEncoded: 'ZXhvYXBwLnR2',
 
     get apiBaseUrl() {
         return `https://${this.domain}`;
