@@ -5,7 +5,7 @@ const { initializeApp } = require("firebase-admin/app");
 // Import Modules
 const SubtitleFetcher = require("./subtitles");
 const FootballService = require("./football");
-const TrailerService = require("./trailer"); // <--- Import New Module
+const TrailerService = require("./trailer"); 
 
 initializeApp();
 
@@ -93,27 +93,39 @@ exports.footballRequest = onRequest({ cors: true }, async (request, response) =>
 });
 
 // ==========================================
-// 3. TRAILER API (NEW)
+// 3. TRAILER API
 // ==========================================
 
 exports.searchTrailer = onRequest({ cors: true }, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
-        // Handle GET (query params) or POST (body)
+        // Support both Body (POST) and Query (GET)
         const movieName = request.body.movie_name || request.query.movie_name;
         const year = request.body.year || request.query.year;
+        const tmdbId = request.body.tmdb_id || request.query.tmdb_id;
+        const type = request.body.type || request.query.type || 'movie';
 
-        if (!movieName) {
-            response.status(400).send({ error: "Missing 'movie_name' parameter" });
+        // Validation
+        if (!movieName && !tmdbId) {
+            response.status(400).send({ 
+                status: "error", 
+                message: "Missing 'movie_name' or 'tmdb_id' parameter" 
+            });
             return;
         }
 
-        const result = await TrailerService.searchTrailer(movieName, year);
+        // Always returns a result object (e.g. { found: false, ... } or { found: true, ... })
+        const result = await TrailerService.searchTrailer(movieName, year, tmdbId, type);
+        
+        // We always send 200 OK so the client can parse the JSON check 'found'
         response.status(200).send(result);
 
     } catch (error) {
         logger.error("Trailer API Error:", error);
-        response.status(500).send({ error: true, message: error.message });
+        response.status(500).send({ 
+            status: "error", 
+            message: error.message 
+        });
     }
 });

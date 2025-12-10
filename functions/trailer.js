@@ -3,9 +3,11 @@
 const axios = require('axios');
 
 // CONFIGURATION
-// TODO: Replace with your actual YouTube Data API v3 Key
-const YOUTUBE_API_KEY = "YOUR_YOUTUBE_API_KEY_HERE"; 
+const YOUTUBE_API_KEY = "AIzaSyAGwuah6_wsPNojzaYDqTsG15tI7V_kQGM"; 
+const TMDB_API_KEY = "4fea759274b31a120afda53601abae83";
+
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/search";
+const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
 const TrailerService = {
 
@@ -16,41 +18,97 @@ const TrailerService = {
         let name = rawName || "";
         let extractedYear = null;
 
-        // 1. Handle IPTV Prefixes (check for first " - ")
         const separatorIndex = name.indexOf(" - ");
         if (separatorIndex !== -1) {
             name = name.substring(separatorIndex + 3);
         }
 
-        // 2. Extract Year if inside parentheses
         const yearMatch = name.match(/\((\d{4})\)/);
         if (yearMatch) {
             extractedYear = yearMatch[1];
             name = name.replace(/\s*\(\d{4}\)\s*/, ''); 
         }
 
-        // 3. General Cleanup
         name = name.replace(/\[.*?\]/g, '').replace(/\{.*?\}/g, '').trim();
 
         return { name, extractedYear };
     },
 
     /**
-     * Searches for a trailer on YouTube and returns detailed info
+     * Main Entry point: Decides whether to use TMDB or YouTube Search
+     * @param {string} movieName 
+     * @param {string} year 
+     * @param {string|number} tmdb_id (Optional)
+     * @param {string} type (Optional: 'movie' or 'tv', defaults to 'movie')
      */
-    searchTrailer: async function(movieName, year) {
-        if (!movieName) throw new Error("Movie name is required");
+    searchTrailer: async function(movieName, year, tmdb_id, type = 'movie') {
+        
+        // 1. Priority: Try TMDB if ID is provided
+        if (tmdb_id) {
+            console.log(`Checking TMDB for ID: ${tmdb_id} (${type})`);
+            const tmdbResult = await this.fetchFromTmdb(tmdb_id, type);
+            
+            if (tmdbResult) {
+                return tmdbResult;
+            }
+            console.log("TMDB trailer not found, falling back to YouTube search...");
+        }
 
-        // Step 1: Clean Name
+        // 2. Fallback: Search YouTube by Name
+        return await this.searchYoutubeByName(movieName, year);
+    },
+
+    /**
+     * Fetches video data from TMDB and formats it like the YouTube response
+     */
+    fetchFromTmdb: async function(id, type) {
+        try {
+            // Endpoint: /movie/{id}/videos or /tv/{id}/videos
+            const endpoint = `${TMDB_BASE_URL}/${type}/${id}/videos`;
+            
+            const response = await axios.get(endpoint, {
+                params: { api_key: TMDB_API_KEY }
+            });
+
+            const results = response.data.results;
+            
+            // Filter: We want a Trailer hosted on YouTube
+            const trailer = results.find(v => v.site === "YouTube" && v.type === "Trailer") 
+                         || results.find(v => v.site === "YouTube"); // Fallback to any YouTube video (Teaser/Clip) if no "Trailer"
+
+            if (trailer) {
+                return {
+                    found: true,
+                    id: trailer.key,
+                    url: `https://www.youtube.com/watch?v=${trailer.key}`,
+                    title: trailer.name,
+                    date: trailer.published_at,
+                    // TMDB doesn't give a full thumbnail URL, so we construct the standard YouTube one
+                    thumbnail: `https://img.youtube.com/vi/${trailer.key}/hqdefault.jpg`, 
+                    channel: "TMDB Official", 
+                    description: "Official Trailer sourced via TMDB"
+                };
+            }
+        } catch (error) {
+            console.error("TMDB API Error:", error.message);
+            // We return null so the main function knows to fall back to YouTube Search
+            return null;
+        }
+        return null;
+    },
+
+    /**
+     * The original YouTube Search Logic
+     */
+    searchYoutubeByName: async function(movieName, year) {
+        if (!movieName) throw new Error("Movie name is required for fallback search");
+
         const cleanedData = this.cleanNameAndExtractYear(movieName);
         let finalName = cleanedData.name;
         let finalYear = cleanedData.extractedYear || year;
 
-        // Step 2: Build Query
         let query = `${finalName}`;
-        if (finalYear) {
-            query += ` ${finalYear}`;
-        }
+        if (finalYear) query += ` ${finalYear}`;
         query += " trailer";
 
         console.log(`Searching YouTube for: [${query}]`);
@@ -58,7 +116,7 @@ const TrailerService = {
         try {
             const response = await axios.get(YOUTUBE_API_URL, {
                 params: {
-                    part: 'snippet', // 'snippet' contains title, thumbnails, date, etc.
+                    part: 'snippet',
                     q: query,
                     type: 'video',
                     maxResults: 1,
@@ -69,19 +127,18 @@ const TrailerService = {
             const items = response.data.items;
 
             if (items && items.length > 0) {
-                const videoItem = items[0];
-                const snippet = videoItem.snippet;
-                const videoId = videoItem.id.videoId;
+                const snippet = items[0].snippet;
+                const videoId = items[0].id.videoId;
 
                 return {
                     found: true,
                     id: videoId,
                     url: `https://www.youtube.com/watch?v=${videoId}`,
-                    title: snippet.title, // Video Title
-                    date: snippet.publishedAt, // Upload Date (ISO format)
-                    thumbnail: snippet.thumbnails.high ? snippet.thumbnails.high.url : snippet.thumbnails.default.url, // Best available thumbnail
-                    channel: snippet.channelTitle, // Who uploaded it (e.g., "Marvel Entertainment")
-                    description: snippet.description // Short description of the video
+                    title: snippet.title,
+                    date: snippet.publishedAt,
+                    thumbnail: snippet.thumbnails.high ? snippet.thumbnails.high.url : snippet.thumbnails.default.url,
+                    channel: snippet.channelTitle,
+                    description: snippet.description
                 };
             } else {
                 return { found: false, message: "No trailer found" };
