@@ -5,6 +5,7 @@ const { initializeApp } = require("firebase-admin/app");
 // Import Modules
 const SubtitleFetcher = require("./subtitles");
 const FootballService = require("./football");
+const TrailerService = require("./trailer"); // <--- Import New Module
 
 initializeApp();
 
@@ -44,7 +45,6 @@ exports.fetchSubtitles = onRequest({ cors: true }, async (request, response) => 
 exports.downloadSubtitle = onRequest({ cors: true }, async (request, response) => {
     if (applyMiddleware(request, response)) return;
     try {
-        // Support both query param (GET) and body (POST) for flexibility
         const subtitleUrl = request.query.url || request.body.url;
         
         if (!subtitleUrl) {
@@ -53,7 +53,6 @@ exports.downloadSubtitle = onRequest({ cors: true }, async (request, response) =
         }
         const content = await SubtitleFetcher.downloadSubtitleContent(subtitleUrl);
         
-        // Force text/plain so the browser/TV parses it as raw text
         response.setHeader('Content-Type', 'text/plain; charset=utf-8');
         response.status(200).send(content);
     } catch (error) {
@@ -70,35 +69,51 @@ exports.footballRequest = onRequest({ cors: true }, async (request, response) =>
     if (applyMiddleware(request, response)) return;
 
     try {
-        // 1. Parse Input
-        // The football.html sends a POST with { endpoint: "...", params: {...} }
         let endpoint = request.body.endpoint;
         let params = request.body.params;
 
-        // Fallback for direct browser testing (GET requests)
         if (request.method === 'GET') {
             endpoint = request.query.endpoint;
             params = { ...request.query };
-            delete params.endpoint; // Remove endpoint from the params list
+            delete params.endpoint; 
         }
 
-        // 2. Validation
         if (!endpoint) {
             response.status(400).send({ error: "Missing 'endpoint' parameter" });
             return;
         }
 
-        // 3. Execution
-        // Now calling the generic fetchData method we added to football.js
         const data = await FootballService.fetchData(endpoint, params || {});
-        
         response.status(200).send(data);
 
     } catch (error) {
         logger.error("Football API Error:", error);
-        response.status(500).send({ 
-            error: true, 
-            message: error.message 
-        });
+        response.status(500).send({ error: true, message: error.message });
+    }
+});
+
+// ==========================================
+// 3. TRAILER API (NEW)
+// ==========================================
+
+exports.searchTrailer = onRequest({ cors: true }, async (request, response) => {
+    if (applyMiddleware(request, response)) return;
+
+    try {
+        // Handle GET (query params) or POST (body)
+        const movieName = request.body.movie_name || request.query.movie_name;
+        const year = request.body.year || request.query.year;
+
+        if (!movieName) {
+            response.status(400).send({ error: "Missing 'movie_name' parameter" });
+            return;
+        }
+
+        const result = await TrailerService.searchTrailer(movieName, year);
+        response.status(200).send(result);
+
+    } catch (error) {
+        logger.error("Trailer API Error:", error);
+        response.status(500).send({ error: true, message: error.message });
     }
 });

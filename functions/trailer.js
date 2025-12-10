@@ -10,54 +10,43 @@ const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/search";
 const TrailerService = {
 
     /**
-     * cleans the name based on IPTV provider patterns
-     * 1. Detects and removes prefixes like "EN - ", "4k - " by finding the first " - "
-     * 2. Extracts year if present in name (e.g. "Movie Name (2020)")
+     * Cleans the name based on IPTV provider patterns
      */
     cleanNameAndExtractYear: function(rawName) {
         let name = rawName || "";
         let extractedYear = null;
 
         // 1. Handle IPTV Prefixes (check for first " - ")
-        // logic: split by " - " (space hyphen space) to avoid breaking names like "Spider-Man"
-        // If " - " exists, we assume the left part is a tag (EN, AR, 4K) and take the right part.
         const separatorIndex = name.indexOf(" - ");
         if (separatorIndex !== -1) {
-            // Take everything after the first " - "
             name = name.substring(separatorIndex + 3);
         }
 
-        // 2. Extract Year if inside parentheses e.g., "(2023)"
+        // 2. Extract Year if inside parentheses
         const yearMatch = name.match(/\((\d{4})\)/);
         if (yearMatch) {
             extractedYear = yearMatch[1];
-            // Remove the year from the name so we don't duplicate it in the search query later
             name = name.replace(/\s*\(\d{4}\)\s*/, ''); 
         }
 
-        // 3. General Cleanup (trim spaces, remove brackets like [FR] if missed by dash check)
+        // 3. General Cleanup
         name = name.replace(/\[.*?\]/g, '').replace(/\{.*?\}/g, '').trim();
 
         return { name, extractedYear };
     },
 
     /**
-     * Searches for a trailer on YouTube
-     * @param {string} movieName 
-     * @param {string|number} year (Optional)
+     * Searches for a trailer on YouTube and returns detailed info
      */
     searchTrailer: async function(movieName, year) {
         if (!movieName) throw new Error("Movie name is required");
 
-        // Step 1: Clean the name and check for year inside the string
+        // Step 1: Clean Name
         const cleanedData = this.cleanNameAndExtractYear(movieName);
         let finalName = cleanedData.name;
-        
-        // Prioritize the year found in the name, otherwise use the passed param
         let finalYear = cleanedData.extractedYear || year;
 
         // Step 2: Build Query
-        // Format: "Iron Man 2008 trailer"
         let query = `${finalName}`;
         if (finalYear) {
             query += ` ${finalYear}`;
@@ -69,7 +58,7 @@ const TrailerService = {
         try {
             const response = await axios.get(YOUTUBE_API_URL, {
                 params: {
-                    part: 'snippet',
+                    part: 'snippet', // 'snippet' contains title, thumbnails, date, etc.
                     q: query,
                     type: 'video',
                     maxResults: 1,
@@ -78,13 +67,21 @@ const TrailerService = {
             });
 
             const items = response.data.items;
+
             if (items && items.length > 0) {
-                const videoId = items[0].id.videoId;
+                const videoItem = items[0];
+                const snippet = videoItem.snippet;
+                const videoId = videoItem.id.videoId;
+
                 return {
                     found: true,
-                    title: items[0].snippet.title,
-                    videoId: videoId,
-                    url: `https://www.youtube.com/watch?v=${videoId}`
+                    id: videoId,
+                    url: `https://www.youtube.com/watch?v=${videoId}`,
+                    title: snippet.title, // Video Title
+                    date: snippet.publishedAt, // Upload Date (ISO format)
+                    thumbnail: snippet.thumbnails.high ? snippet.thumbnails.high.url : snippet.thumbnails.default.url, // Best available thumbnail
+                    channel: snippet.channelTitle, // Who uploaded it (e.g., "Marvel Entertainment")
+                    description: snippet.description // Short description of the video
                 };
             } else {
                 return { found: false, message: "No trailer found" };
