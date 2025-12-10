@@ -6,6 +6,7 @@ const { initializeApp } = require("firebase-admin/app");
 const SubtitleFetcher = require("./subtitles");
 const FootballService = require("./football");
 const TrailerService = require("./trailer"); 
+const RecommendationService = require("./recommendations");
 
 initializeApp();
 
@@ -123,6 +124,46 @@ exports.searchTrailer = onRequest({ cors: true }, async (request, response) => {
 
     } catch (error) {
         logger.error("Trailer API Error:", error);
+        response.status(500).send({ 
+            status: "error", 
+            message: error.message 
+        });
+    }
+});
+
+
+
+// ==========================================
+// 4. RECOMMENDATIONS API
+// ==========================================
+
+exports.getRecommendations = onRequest({ cors: true }, async (request, response) => {
+    if (applyMiddleware(request, response)) return;
+
+    try {
+        // Parse Body
+        let favorites = request.body.favorites || [];
+        let watched = request.body.watched || [];
+        
+        // Params: returnmax (default 20), type (default movie)
+        // Checks both Body and Query string
+        let count = parseInt(request.body.returnmax || request.query.returnmax || 20);
+        let type = request.body.type || 'movie'; 
+
+        // Safety: Limit max return to 100 to prevent timeout
+        if (count > 100) count = 100;
+
+        // Run Logic
+        const recommendations = await RecommendationService.getRecommendations(favorites, watched, count, type);
+        
+        response.status(200).send({
+            status: "success",
+            count: recommendations.length,
+            data: recommendations
+        });
+
+    } catch (error) {
+        logger.error("Recommendation API Error:", error);
         response.status(500).send({ 
             status: "error", 
             message: error.message 

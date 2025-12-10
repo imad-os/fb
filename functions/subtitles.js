@@ -1,30 +1,23 @@
 "use strict";
 
-const SubtitleFetcher = {
-    // Defines the domain
-    domain: "iptv-subtitle.geekspro.us",
-    
-    // Encoded replacement domain
-    targetDomainEncoded: 'ZXhvYXBwLnR2',
+const config = require('./config');
 
+const SubtitleFetcher = {
+    
     get apiBaseUrl() {
-        return `https://${this.domain}`;
+        return `https://${config.SUBTITLES_DOMAIN}`;
     },
 
     get apiUrl() {
-        return `https://${this.domain}/api/get-subtitles`;
+        return `https://${config.SUBTITLES_DOMAIN}/api/get-subtitles`;
     },
 
     // Node.js compatible URL fixer
     fixUrl(url) {
-        const replacement = Buffer.from(this.targetDomainEncoded, 'base64').toString('utf-8');
-        return url.replace(this.domain, replacement);
+        const replacement = Buffer.from(config.SUBTITLES_TARGET_ENCODED, 'base64').toString('utf-8');
+        return url.replace(config.SUBTITLES_DOMAIN, replacement);
     },
 
-    /**
-     * Parse the request and fetch list of subtitles
-     * Returns a Promise that resolves to the subtitles array
-     */
     fetchSubtitles: async function(movieData, movieType) {
         if (!movieData) {
             throw new Error("No media data provided");
@@ -44,7 +37,7 @@ const SubtitleFetcher = {
                 cleanedName = cleanedName.replace(/\s*\(\d{4}\)\s*/, '').trim();
             }
 
-            // Cleanup patterns (Common release tags)
+            // Cleanup patterns
             cleanedName = cleanedName.replace(/\s*\b(HD|4K|1080p|720p|480p|BluRay|BRRip|WEB-DL|WEBRip|DVDRip|CAMRip|TS|TC|HDTV|PDTV|XviD|x264|x265|HEVC|DivX|AC3|AAC|MP3|Dubbed|Subbed|MultiAudio)\b\s*/gi, ' ').trim();
             cleanedName = cleanedName.replace(/\[.*?\]/g, '').trim();
             cleanedName = cleanedName.replace(/\{.*?\}/g, '').trim();
@@ -68,7 +61,6 @@ const SubtitleFetcher = {
                 };
                 if (movieData.series_tmdb_id) subtitleRequestData.tmdb_id = movieData.series_tmdb_id;
             } else {
-                // Fallback parsing
                 const episodeName = movieData.title || movieData.name || movieData.episode_name || '';
                 const parsed = this.parseEpisodeName(episodeName);
 
@@ -86,7 +78,6 @@ const SubtitleFetcher = {
             }
         }
 
-        // Perform the API Request
         return this.makeSubtitleRequest(subtitleRequestData);
     },
 
@@ -110,7 +101,7 @@ const SubtitleFetcher = {
             if (result.status === "success" && result.subtitles && result.subtitles.length > 0) {
                 return result.subtitles;
             } else {
-                return []; // Return empty array if none found
+                return []; 
             }
         } catch (error) {
             console.error("Subtitle API Error:", error);
@@ -118,11 +109,6 @@ const SubtitleFetcher = {
         }
     },
 
-    /**
-     * Downloads the subtitle content.
-     * Note: "Setting" the subtitle (Tizen API) must happen on the client side.
-     * This function only fetches the content stream.
-     */
     downloadSubtitleContent: async function(url) {
         const fullUrl = url.startsWith('http') ? url : this.apiBaseUrl + url;
         const fixedUrl = this.fixUrl(fullUrl);
@@ -131,8 +117,6 @@ const SubtitleFetcher = {
 
         const response = await fetch(fixedUrl);
         if (!response.ok) throw new Error(`Download Failed: ${response.status}`);
-        
-        // Return the text content (SRT/VTT data)
         return await response.text(); 
     },
 
