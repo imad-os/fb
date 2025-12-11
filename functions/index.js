@@ -7,6 +7,7 @@ const SubtitleFetcher = require("./subtitles");
 const FootballService = require("./football");
 const TrailerService = require("./trailer"); 
 const RecommendationService = require("./recommendations");
+const LocationService = require("./location");
 
 initializeApp();
 
@@ -168,5 +169,79 @@ exports.getRecommendations = onRequest({ cors: true }, async (request, response)
             status: "error", 
             message: error.message 
         });
+    }
+});
+
+
+// ==========================================
+// 5. LOCATION API (NEW)
+// ==========================================
+
+exports.getLocation = onRequest({ cors: true }, async (request, response) => {
+    if (applyMiddleware(request, response)) return;
+
+    try {
+        // Accepts: { ip: "24.48.0.1" }
+        const ip = request.body.ip || request.query.ip;
+
+        if (!ip) {
+            response.status(400).send({ status: "error", message: "Missing IP address" });
+            return;
+        }
+
+        const locationData = await LocationService.getLocationByIp(ip);
+        response.status(200).send(locationData);
+
+    } catch (error) {
+        logger.error("Location API Error:", error);
+        response.status(500).send({ status: "error", message: error.message });
+    }
+});
+
+// ==========================================
+// 6. FOOTBALL RECOMMENDATIONS API (NEW)
+// ==========================================
+
+exports.footballRecommendations = onRequest({ cors: true }, async (request, response) => {
+    if (applyMiddleware(request, response)) return;
+
+    try {
+        // Accepts: { country: "England", city: "London" }
+        let country = request.body.country || request.query.country;
+        let city = request.body.city || request.query.city;
+
+        // If no country provided, try to detect location via IP
+        if (!country) {
+            // Priority: provided 'ip' param -> x-forwarded-for header -> connection remote address
+            const clientIp = request.body.ip || request.query.ip || (request.headers['x-forwarded-for'] || '').split(',')[0] || request.connection.remoteAddress;
+
+            if (clientIp) {
+                try {
+                    const location = await LocationService.getLocationByIp(clientIp);
+                    country = location.country;
+                    city = location.city; // Auto-fill city as well
+                    logger.info(`Auto-detected location for IP ${clientIp}: ${country}, ${city}`);
+                } catch (e) {
+                    logger.warn(`Failed to resolve location for IP ${clientIp}: ${e.message}`);
+                }
+            }
+        }
+
+        if (!country) {
+            response.status(400).send({ status: "error", message: "Country is required for recommendations and could not be determined from IP." });
+            return;
+        }
+
+        const matches = await FootballService.getRecommendedMatches(country, city || "");
+        
+        response.status(200).send({
+            status: "success",
+            count: matches.length,
+            data: matches
+        });
+
+    } catch (error) {
+        logger.error("Football Recs Error:", error);
+        response.status(500).send({ status: "error", message: error.message });
     }
 });
