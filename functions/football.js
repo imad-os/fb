@@ -3,9 +3,13 @@
 const axios = require('axios'); 
 const config = require('./config');
 
+const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
+
 const HEADERS = {
     'x-rapidapi-host': config.FOOTBALL_HOST_HEADER,
-    'x-rapidapi-key': config.FOOTBALL_API_KEY
+    'x-rapidapi-key': config.FOOTBALL_API_KEY,
+    "user-agent" : ua,
+    "authority" : "v3.football.api-sports.io",
 };
 
 const FootballService = {
@@ -17,6 +21,7 @@ const FootballService = {
                 headers: HEADERS,
                 params: params
             });
+
             return response.data;
         } catch (error) {
             console.error(`Football API Error [${cleanEndpoint}]:`, error.message);
@@ -38,7 +43,9 @@ const FootballService = {
 
         const response = await this.fetchData('/fixtures', { date: today });
         const allMatches = response.response || [];
-
+        if( Object.keys(response.errors).length ){
+            return response.errors;
+        }
         if (allMatches.length === 0) return [];
 
         // Get the relevant IDs for the user's continent

@@ -2,13 +2,14 @@
 
 module.exports = {
     // --- FOOTBALL API ---
-    FOOTBALL_API_KEY: "9e9fb80bd8d4c5c226e8a7f69375995a",
+    //FOOTBALL_API_KEY: "9e9fb80bd8d4c5c226e8a7f69375995a",//backup api
+    FOOTBALL_API_KEY: "d79fe49364b4f281787947da46201ee3",
     FOOTBALL_BASE_URL: "https://v3.football.api-sports.io",
     FOOTBALL_HOST_HEADER: "v3.football.api-sports.io",
 
     // --- SUBTITLES API ---
     SUBTITLES_DOMAIN: "iptv-subtitle.geekspro.us",
-    SUBTITLES_TARGET_ENCODED: "ZXhvYXBwLnR2", // "exoapp.tv" encoded
+    SUBTITLES_TARGET_ENCODED: "ZXhvYXBwLnR2",
 
     // --- YOUTUBE API ---
     // TODO: Add your YouTube API Key here
