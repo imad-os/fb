@@ -8,9 +8,7 @@ const LocationService = {
      * Fetches location details for a given IP
      * @param {string} ipAddress 
      */
-    getLocationByIp: async function(ipAddress) {
-        if (!ipAddress) throw new Error("IP Address is required");
-
+    getLocationByIp: async function(ipAddress="") {
         try {
             // ip-api.com/json/{ip}
             const url = `${config.IP_API_URL}/${ipAddress}`;
@@ -22,13 +20,7 @@ const LocationService = {
 
             return {
                 status: "success",
-                country: response.data.country,
-                countryCode: response.data.countryCode, // e.g., "US", "GB"
-                city: response.data.city,
-                timezone: response.data.timezone,
-                lat: response.data.lat,
-                lon: response.data.lon,
-                query: response.data.query // The IP itself
+                ...response.data
             };
 
         } catch (error) {

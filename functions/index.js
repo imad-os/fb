@@ -2,6 +2,9 @@ const { onRequest } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const { initializeApp } = require("firebase-admin/app");
 
+const config = require('./config');
+
+
 // Import Modules
 const SubtitleFetcher = require("./subtitles");
 const FootballService = require("./football");
@@ -181,14 +184,7 @@ exports.getLocation = onRequest({ cors: true }, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
-        // Accepts: { ip: "24.48.0.1" }
-        const ip = request.body.ip || request.query.ip;
-
-        if (!ip) {
-            response.status(400).send({ status: "error", message: "Missing IP address" });
-            return;
-        }
-
+        const ip = request.body.ip || request.query.ip || "";
         const locationData = await LocationService.getLocationByIp(ip);
         response.status(200).send(locationData);
 
@@ -200,39 +196,39 @@ exports.getLocation = onRequest({ cors: true }, async (request, response) => {
 
 // ==========================================
 // 6. FOOTBALL RECOMMENDATIONS API (NEW)
-// ==========================================
 
 exports.footballRecommendations = onRequest({ cors: true }, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
-        // Accepts: { country: "England", city: "London" }
         let country = request.body.country || request.query.country;
         let city = request.body.city || request.query.city;
+        let continentCode = request.body.continent || request.query.continent;
 
-        // If no country provided, try to detect location via IP
-        if (!country) {
-            // Priority: provided 'ip' param -> x-forwarded-for header -> connection remote address
-            const clientIp = request.body.ip || request.query.ip || (request.headers['x-forwarded-for'] || '').split(',')[0] || request.connection.remoteAddress;
-
-            if (clientIp) {
-                try {
-                    const location = await LocationService.getLocationByIp(clientIp);
-                    country = location.country;
-                    city = location.city; // Auto-fill city as well
-                    logger.info(`Auto-detected location for IP ${clientIp}: ${country}, ${city}`);
-                } catch (e) {
-                    logger.warn(`Failed to resolve location for IP ${clientIp}: ${e.message}`);
-                }
+        // Auto-detect if parameters are missing
+        if (!country || !continentCode) {
+            try {
+                const location = await LocationService.getLocationByIp();
+                country = location.country;
+                city = location.city;
+                continentCode = config.FOOTBALL_CONTINENT_MAP[location.countryCode] || "";
+                
+                logger.info(`Auto-detected: ${country}, ${city}, ${continentCode}`);
+            } catch (e) {
+                logger.warn("Location detection failed", e);
             }
         }
 
-        if (!country) {
-            response.status(400).send({ status: "error", message: "Country is required for recommendations and could not be determined from IP." });
+        if (!country || !continentCode) {
+            response.status(400).send({ 
+                status: "error", 
+                message: "Location (Country/Continent) is required and could not be detected." 
+            });
             return;
         }
 
-        const matches = await FootballService.getRecommendedMatches(country, city || "");
+        // Pass continentCode ("AF", "EU", etc) to apply strict filtering
+        const matches = await FootballService.getRecommendedMatches(country, city || "", continentCode);
         
         response.status(200).send({
             status: "success",

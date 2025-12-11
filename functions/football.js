@@ -25,117 +25,121 @@ const FootballService = {
     },
 
     /**
-     * Returns top 10 recommended matches based on user location
-     * @param {string} country - User's Country (e.g. "England")
-     * @param {string} city - User's City (e.g. "London")
+     * Returns strictly recommended matches based on location AND favorite teams
+     * @param {string} country - "Morocco"
+     * @param {string} city - "Casablanca"
+     * @param {string} continentCode - "AF"
      */
-    getRecommendedMatches: async function(country, city) {
-        // 1. Get Today's Date in YYYY-MM-DD format
+    getRecommendedMatches: async function(country, city, continentCode) {
         const today = new Date().toISOString().split('T')[0];
+        country = country.toLowerCase();
+        city = city.toLowerCase();
+        console.log(`Fetching fixtures for ${today} | Location: ${country}, ${city} (${continentCode})`);
 
-        console.log(`Fetching fixtures for ${today} | User: ${country}, ${city}`);
-
-        // 2. Fetch ALL matches for today (More efficient than 10 separate calls)
         const response = await this.fetchData('/fixtures', { date: today });
         const allMatches = response.response || [];
 
         if (allMatches.length === 0) return [];
 
-        // 3. Score each match based on priority
+        // Get the relevant IDs for the user's continent
+        const localContinentData = config.CONTINENT_LEAGUES[continentCode] || { CUP: [], CL: [], SECOND: [] };
+
         const scoredMatches = allMatches.map(match => {
             let score = 0;
             const leagueId = match.league.id;
-            const leagueCountry = match.league.country;
-            const homeTeam = match.teams.home.name;
-            const awayTeam = match.teams.away.name;
+            const leagueCountry = match.league.country.toLowerCase();
+            const homeTeam = match.teams.home.name.toLowerCase();
+            const awayTeam = match.teams.away.name.toLowerCase();
             const venueCity = match.fixture.venue.city || "";
+            const homeTeamId = match.teams.home.id;
+            const awayTeamId = match.teams.away.id;
 
-            // --- PRIORITY LOGIC ---
-
-            // 1. World Cup
-            if (config.FOOTBALL_PRIORITY_LEAGUES.WORLD_CUP.includes(leagueId)) {
-                score += 1000; 
-                console.log("herer")
+            // 1. World Cup (Global) -> Score 1000
+            if (config.GLOBAL_LEAGUES.includes(leagueId)) {
+                score = 1000;
             }
-            // 2. Continent Cup (Euro, Asian Cup...)
-            else if (config.FOOTBALL_PRIORITY_LEAGUES.CONTINENT_CUP.includes(leagueId)) {
-                score += 900;
-                console.log("herer 3 ")
+            // 2. Continent Cup (MUST Match User Continent) -> Score 900
+            else if (localContinentData.CUP.includes(leagueId)) {
+                score = 900;
             }
-            // 3. Champions League (UCL, CAF CL...)
-            else if (config.FOOTBALL_PRIORITY_LEAGUES.CHAMPIONS_LEAGUE.includes(leagueId)) {
-                score += 800;
-                console.log("herer 3.5 , ", leagueId)
+            // 3. Continent Champions League (MUST Match User Continent) -> Score 800
+            else if (localContinentData.CL.includes(leagueId)) {
+                score = 800;
             }
-            // 4. Second Cup of Continent (Europa...)
-            else if (config.FOOTBALL_PRIORITY_LEAGUES.CONTINENT_SECOND.includes(leagueId)) {
-                score += 700;
-                console.log("herer 4 ", leagueId)
+            // 5. Second Continent Cup (MUST Match User Continent) -> Score 700
+            else if (localContinentData.SECOND.includes(leagueId)) {
+                score = 700;
             }
-            // 5. Country League (Premier League, etc.) - Must match User Country
+            // 4. FAVORITE TEAMS (Global Appeal) -> Score 750
+            // This ensures Real Madrid, Liverpool etc are shown even if not in your country
+            else if (config.FAVORITE_TEAMS.includes(homeTeamId) || config.FAVORITE_TEAMS.includes(awayTeamId) ) {
+                score = 750;
+            }
+            // 6. Country League (MUST Match User Country) -> Score 600
             else if (leagueCountry === country && match.league.type === 'League') {
-                score += 600;
-                console.log("herer 5 ")
-                // Boost for Top Tier leagues (usually contain "Premier" or "1" in name)
-                if (match.league.name.includes("Premier") || match.league.name.includes("Liga 1")) {
+                score = 600;
+                if (match.league.name.includes("Premier") || match.league.name.includes("1") || match.league.name.includes("Botola")) {
                     score += 50; 
                 }
             }
-            // 6. Country Cup - Must match User Country
+            // 7. Country Cup (MUST Match User Country) -> Score 500
             else if (leagueCountry === country && match.league.type === 'Cup') {
-                score += 500;
-                console.log("herer 6 ")
+                score = 500;
             }
-            // 7. Friendlies (Current City or National Team)
-            else if (config.FOOTBALL_PRIORITY_LEAGUES.FRIENDLIES.includes(leagueId)) {
-                // Check if Home or Away team matches User Country (National Team) OR User City (Local Club)
+            // 8. Friendlies (MUST involve User Country or City OR Favorite Team) -> Score 400
+            else if (config.FRIENDLIES.includes(leagueId)) {
                 const isNationalTeam = (homeTeam === country || awayTeam === country);
-                const isLocalCity = (venueCity.includes(city) || homeTeam.includes(city) || awayTeam.includes(city));
-                
-                if (isNationalTeam || isLocalCity) {
-                    score += 400;
-                } else {
-                    score += 10; // Irrelevant friendly
+                const isLocalCity = (venueCity && city && venueCity.includes(city));
+                const isFavorite = (config.FAVORITE_TEAMS.includes(homeTeam) || config.FAVORITE_TEAMS.includes(awayTeam));
+
+                if (isNationalTeam || isLocalCity || isFavorite) {
+                    score = 400;
                 }
-
-                console.log("herer 7 ")
-            } else {
-                // Standard match (score based on importance or ignore)
-                score += 20; 
             }
-
+            if ( 
+                (venueCity && city && venueCity.includes(city)) ||
+                homeTeam.includes(city)  || 
+                awayTeam.includes(city)
+             ){
+                score = 700;
+            }
+            if( homeTeam === country || awayTeam === country ){
+                score += 900;
+            }else if( homeTeam.includes(country)  || awayTeam.includes(country) ){
+                score += 400;
+            }
+            // If score is still 0, it means it's unrelated to User OR Favorites
             return { match, score };
         });
 
-        // 4. Sort by Score (Descending)
-        scoredMatches.sort((a, b) => b.score - a.score);
+        // Filter out unrelated matches (Score 0)
+        const relevantMatches = scoredMatches.filter(item => item.score > 0);
 
-        // 5. Return Top 10 (Formatted Cleanly)
-        return scoredMatches.slice(0, 10).map(item => {
-            const m = item.match;
-            return {
-                fixture_id: m.fixture.id,
-                date: m.fixture.date,
-                status: m.fixture.status.short,
-                league: {
-                    name: m.league.name,
-                    country: m.league.country,
-                    logo: m.league.logo
-                },
-                home: {
-                    name: m.teams.home.name,
-                    logo: m.teams.home.logo,
-                    goals: m.goals.home
-                },
-                away: {
-                    name: m.teams.away.name,
-                    logo: m.teams.away.logo,
-                    goals: m.goals.away
-                },
-                // Debug info to see why it was recommended
-                priority_score: item.score 
-            };
-        });
+        // Sort by Score (High to Low)
+        relevantMatches.sort((a, b) => b.score - a.score);
+
+        // Return Top Matches
+        return relevantMatches.slice(0, 20).map(item => ({
+            fixture_id: item.match.fixture.id,
+            date: item.match.fixture.date,
+            status: item.match.fixture.status.short,
+            league: {
+                name: item.match.league.name,
+                country: item.match.league.country,
+                logo: item.match.league.logo
+            },
+            home: {
+                name: item.match.teams.home.name,
+                logo: item.match.teams.home.logo,
+                goals: item.match.goals.home
+            },
+            away: {
+                name: item.match.teams.away.name,
+                logo: item.match.teams.away.logo,
+                goals: item.match.goals.away
+            },
+            priority_score: item.score
+        }));
     }
 };
 

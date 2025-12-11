@@ -22,17 +22,80 @@ module.exports = {
     TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p/w500",
     TMDB_BACKDROP_BASE: "https://image.tmdb.org/t/p/original",
 
-    // Known IDs for Priority Sorting (You can add more IDs here as needed)
-    // 1=World Cup, 2=UCL, 3=Europa, 4=Euro, 9=Copa America, 15=Asian Cup, 16=AFCON
-    FOOTBALL_PRIORITY_LEAGUES: {
-        WORLD_CUP: [1,15], 
-        CONTINENT_CUP: [6,19,5,4,14,1168],
-        CHAMPIONS_LEAGUE: [2,12,848,533,36,],
-        CONTINENT_SECOND: [3, 5, 20],
-        FRIENDLIES: [666, 10]
-    },
-
     // --- IP LOCATION API ---
     IP_API_URL: "http://ip-api.com/json",
 
+    // 1. GLOBAL (Always relevant)
+    GLOBAL_LEAGUES: [1,15,1168], // World Cup
+
+    // 2. CONTINENTAL SPECIFIC
+    // Keys match the "continentCode" from IP-API (EU, AF, AS, SA, NA, OC)
+    CONTINENT_LEAGUES: {
+        // Europe
+        EU: {
+            CUP: [4],          // Euro
+            CL: [2],           // UEFA Champions League
+            SECOND: [3, 848]   // Europa League, Conference League
+        },
+        // Africa
+        AF: {   
+            CUP: [6],         // AFCON (African Cup of Nations)
+            CL: [12],          // CAF Champions League
+            SECOND: [20]       // CAF Confederation Cup
+        },
+        // Asia
+        AS: {
+            CUP: [15],         // Asian Cup
+            CL: [17],          // AFC Champions League
+            SECOND: [18]       // AFC Cup
+        },
+        // South America
+        SA: {
+            CUP: [9],          // Copa America
+            CL: [13],          // Copa Libertadores
+            SECOND: [11]       // Copa Sudamericana
+        },
+        // North America
+        NA: {
+            CUP: [22],         // Gold Cup
+            CL: [16],          // CONCACAF Champions League
+            SECOND: []
+        }
+    },
+
+    // FRIENDLIES (Check team names)
+    FRIENDLIES: [10, 666], 
+
+    FAVORITE_TEAMS: [
+        85,//PSG
+        50,//Manchester City
+        541,//Real Madrid
+        529,//Barcelona
+        23
+    ],
+    
+    FOOTBALL_CONTINENT_MAP : {
+        // AFRICA (CAF)
+        "MA": "AF", "DZ": "AF", "TN": "AF", "EG": "AF", "LY": "AF", // North
+        "NG": "AF", "GH": "AF", "CI": "AF", "SN": "AF", "CM": "AF", // West/Central
+        "ZA": "AF", "KE": "AF", "TZ": "AF", "UG": "AF", "AO": "AF", // South/East
+    
+        // EUROPE (UEFA)
+        "GB": "EU", "UK": "EU", "FR": "EU", "DE": "EU", "IT": "EU", "ES": "EU",
+        "PT": "EU", "NL": "EU", "BE": "EU", "RU": "EU", "TR": "EU", "IL": "EU", // Israel is UEFA
+        "KZ": "EU", "UA": "EU", "PL": "EU", "SE": "EU", "NO": "EU", "DK": "EU",
+    
+        // ASIA (AFC)
+        "JP": "AS", "KR": "AS", "CN": "AS", "IN": "AS", "SA": "AS", 
+        "QA": "AS", "AE": "AS", "IR": "AS", "IQ": "AS", "TH": "AS",
+        "AU": "AS", // Australia plays in Asian Confederation (AFC)
+    
+        // SOUTH AMERICA (CONMEBOL)
+        "BR": "SA", "AR": "SA", "UY": "SA", "CO": "SA", "CL": "SA",
+        "PE": "SA", "EC": "SA", "PY": "SA", "VE": "SA", "BO": "SA",
+    
+        // NORTH AMERICA (CONCACAF)
+        "US": "NA", "CA": "NA", "MX": "NA", "CR": "NA", "PA": "NA",
+        "JM": "NA", "HN": "NA", "SV": "NA", "GT": "NA"
+    },
 };
