@@ -6,8 +6,8 @@ const config = require('./config');
 const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 
 const HEADERS = {
-    'x-rapidapi-host': config.FOOTBALL_HOST_HEADER,
-    'x-rapidapi-key': config.FOOTBALL_API_KEY,
+    'x-rapidapi-host': config.API.host,
+    'x-rapidapi-key': config.API.key,
     "user-agent" : ua,
     "authority" : "v3.football.api-sports.io",
 };
@@ -17,7 +17,9 @@ const FootballService = {
     fetchData: async function(endpoint, params = {}) {
         const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
         try {
-            const response = await axios.get(`${config.FOOTBALL_BASE_URL}${cleanEndpoint}`, {
+            const fullUrl = `${config.API.url}${cleanEndpoint}`;
+            console.log(fullUrl)
+            const response = await axios.get(fullUrl, {
                 headers: HEADERS,
                 params: params
             });

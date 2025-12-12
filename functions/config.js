@@ -1,11 +1,12 @@
 "use strict";
-
+const footballApis=[
+    {"url":"https://v3.football.api-sports.io","host":"v3.football.api-sports.io", "key":"9e9fb80bd8d4c5c226e8a7f69375995a"},
+    {"url":"https://v3.football.api-sports.io","host":"v3.football.api-sports.io", "key":"d79fe49364b4f281787947da46201ee3"},
+    {"url":"https://api-football-v1.p.rapidapi.com/v3","host":"api-football-v1.p.rapidapi.com", "key":"b7e837cfb4msh0b84d927aa2291dp130d32jsn7b1570d863f8"},
+    {"url":"https://api-football-v1.p.rapidapi.com/v3","host":"api-football-v1.p.rapidapi.com", "key":"b3a3d033ffmsh6e94bc1a2adfb2ap197138jsn33bbf80e8bb2"},
+];
 module.exports = {
-    // --- FOOTBALL API ---
-    //FOOTBALL_API_KEY: "9e9fb80bd8d4c5c226e8a7f69375995a",//backup api
-    FOOTBALL_API_KEY: "d79fe49364b4f281787947da46201ee3",
-    FOOTBALL_BASE_URL: "https://v3.football.api-sports.io",
-    FOOTBALL_HOST_HEADER: "v3.football.api-sports.io",
+    API:footballApis[0],
 
     // --- SUBTITLES API ---
     SUBTITLES_DOMAIN: "iptv-subtitle.geekspro.us",
