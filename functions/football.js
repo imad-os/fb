@@ -9,7 +9,7 @@ const HEADERS = {
     'x-rapidapi-host': config.API.host,
     'x-rapidapi-key': config.API.key,
     "user-agent" : ua,
-    "authority" : "v3.football.api-sports.io",
+    //"authority" : "v3.football.api-sports.io",
 };
 
 const FootballService = {
@@ -18,7 +18,7 @@ const FootballService = {
         const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
         try {
             const fullUrl = `${config.API.url}${cleanEndpoint}`;
-            console.log(fullUrl)
+
             const response = await axios.get(fullUrl, {
                 headers: HEADERS,
                 params: params
@@ -149,7 +149,22 @@ const FootballService = {
             },
             priority_score: item.score
         }));
-    }
+    },
+
+    news:async function(langue,country,page=1){
+        const apiurl="https://api.elbotola.com/newsfeed/v3/?exclude_ids=&has_copyright=True&important_matches=True";
+        try {
+            const fullUrl = `${apiurl}&lang=${langue||'en'}&page=${page||1}&country_code=${country||'MA'}`;
+            const response = await axios.get(fullUrl, {
+                headers: {"user-agent" : ua},
+            });
+
+            return response.data;
+        } catch (error) {
+            console.error(`Football API Error [${cleanEndpoint}]:`, error.message);
+            throw new Error(error.response?.data?.message || "Failed to fetch data from Football Provider");
+        }
+    },
 };
 
 module.exports = FootballService;

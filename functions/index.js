@@ -27,6 +27,25 @@ const applyMiddleware = (req, res) => {
     return false;
 };
 
+
+// ==========================================
+// 5. LOCATION API (NEW)
+// ==========================================
+
+exports.getLocation = onRequest({ cors: true }, async (request, response) => {
+    if (applyMiddleware(request, response)) return;
+
+    try {
+        const ip = request.body.ip || request.query.ip || "";
+        const locationData = await LocationService.getLocationByIp(ip);
+        response.status(200).send(locationData);
+
+    } catch (error) {
+        logger.error("Location API Error:", error);
+        response.status(500).send({ status: "error", message: error.message });
+    }
+});
+
 // ==========================================
 // 1. SUBTITLES API
 // ==========================================
@@ -63,37 +82,6 @@ exports.downloadSubtitle = onRequest({ cors: true }, async (request, response) =
     } catch (error) {
         logger.error("Download error:", error);
         response.status(500).send("Failed to download.");
-    }
-});
-
-// ==========================================
-// 2. FOOTBALL API
-// ==========================================
-
-exports.footballRequest = onRequest({ cors: true }, async (request, response) => {
-    if (applyMiddleware(request, response)) return;
-
-    try {
-        let endpoint = request.body.endpoint;
-        let params = request.body.params;
-
-        if (request.method === 'GET') {
-            endpoint = request.query.endpoint;
-            params = { ...request.query };
-            delete params.endpoint; 
-        }
-
-        if (!endpoint) {
-            response.status(400).send({ error: "Missing 'endpoint' parameter" });
-            return;
-        }
-
-        const data = await FootballService.fetchData(endpoint, params || {});
-        response.status(200).send(data);
-
-    } catch (error) {
-        logger.error("Football API Error:", error);
-        response.status(500).send({ error: true, message: error.message });
     }
 });
 
@@ -177,25 +165,39 @@ exports.getRecommendations = onRequest({ cors: true }, async (request, response)
 
 
 // ==========================================
-// 5. LOCATION API (NEW)
+// 2. FOOTBALL API
 // ==========================================
 
-exports.getLocation = onRequest({ cors: true }, async (request, response) => {
+exports.footballRequest = onRequest({ cors: true }, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
-        const ip = request.body.ip || request.query.ip || "";
-        const locationData = await LocationService.getLocationByIp(ip);
-        response.status(200).send(locationData);
+        let endpoint = request.body.endpoint;
+        let params = request.body.params;
+
+        if (request.method === 'GET') {
+            endpoint = request.query.endpoint;
+            params = { ...request.query };
+            delete params.endpoint; 
+        }
+
+        if (!endpoint) {
+            response.status(400).send({ error: "Missing 'endpoint' parameter" });
+            return;
+        }
+
+        const data = await FootballService.fetchData(endpoint, params || {});
+        response.status(200).send(data);
 
     } catch (error) {
-        logger.error("Location API Error:", error);
-        response.status(500).send({ status: "error", message: error.message });
+        logger.error("Football API Error:", error);
+        response.status(500).send({ error: true, message: error.message });
     }
 });
 
 // ==========================================
 // 6. FOOTBALL RECOMMENDATIONS API (NEW)
+// ==========================================
 
 exports.footballRecommendations = onRequest({ cors: true }, async (request, response) => {
     if (applyMiddleware(request, response)) return;
@@ -205,7 +207,6 @@ exports.footballRecommendations = onRequest({ cors: true }, async (request, resp
         let city = request.body.city || request.query.city;
         let continentCode = request.body.continent || request.query.continent;
 
-        // Auto-detect if parameters are missing
         if (!country || !continentCode) {
             try {
                 const location = await LocationService.getLocationByIp();
@@ -227,7 +228,6 @@ exports.footballRecommendations = onRequest({ cors: true }, async (request, resp
             return;
         }
 
-        // Pass continentCode ("AF", "EU", etc) to apply strict filtering
         const matches = await FootballService.getRecommendedMatches(country, city || "", continentCode);
         
         response.status(200).send({
@@ -238,6 +238,23 @@ exports.footballRecommendations = onRequest({ cors: true }, async (request, resp
 
     } catch (error) {
         logger.error("Football Recs Error:", error);
+        response.status(500).send({ status: "error", message: error.message });
+    }
+});
+
+
+exports.footballNews = onRequest({ cors: true }, async (request, response) => {
+    if (applyMiddleware(request, response)) return;
+
+    try {
+        const langue  = request.body.langue || request.query.langue || "en";
+        const country = request.body.country || request.query.country || "MA";
+        const page    = request.body.page || request.query.page || 1;
+        const news = await FootballService.news(langue,country,page);
+        response.status(200).send(news);
+
+    } catch (error) {
+        logger.error("news API Error:", error);
         response.status(500).send({ status: "error", message: error.message });
     }
 });
