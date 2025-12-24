@@ -27,12 +27,18 @@ const applyMiddleware = (req, res) => {
     return false;
 };
 
+const settings =   {
+    region: "europe-west1",
+    //minInstances: 1,
+    //memory: "512MiB",
+    cors: true
+  };
 
 // ==========================================
 // 5. LOCATION API (NEW)
 // ==========================================
 
-exports.getLocation = onRequest({ cors: true }, async (request, response) => {
+exports.getLocation = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
@@ -50,7 +56,7 @@ exports.getLocation = onRequest({ cors: true }, async (request, response) => {
 // 1. SUBTITLES API
 // ==========================================
 
-exports.fetchSubtitles = onRequest({ cors: true }, async (request, response) => {
+exports.fetchSubtitles = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
     try {
         const { movieData, movieType } = request.body;
@@ -66,7 +72,7 @@ exports.fetchSubtitles = onRequest({ cors: true }, async (request, response) => 
     }
 });
 
-exports.downloadSubtitle = onRequest({ cors: true }, async (request, response) => {
+exports.downloadSubtitle = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
     try {
         const subtitleUrl = request.query.url || request.body.url;
@@ -89,7 +95,7 @@ exports.downloadSubtitle = onRequest({ cors: true }, async (request, response) =
 // 3. TRAILER API
 // ==========================================
 
-exports.searchTrailer = onRequest({ cors: true }, async (request, response) => {
+exports.searchTrailer = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
@@ -129,7 +135,7 @@ exports.searchTrailer = onRequest({ cors: true }, async (request, response) => {
 // 4. RECOMMENDATIONS API
 // ==========================================
 
-exports.getRecommendations = onRequest({ cors: true }, async (request, response) => {
+exports.getRecommendations = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
@@ -168,7 +174,7 @@ exports.getRecommendations = onRequest({ cors: true }, async (request, response)
 // 2. FOOTBALL API
 // ==========================================
 
-exports.footballRequest = onRequest({ cors: true }, async (request, response) => {
+exports.footballRequest = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
@@ -199,7 +205,7 @@ exports.footballRequest = onRequest({ cors: true }, async (request, response) =>
 // 6. FOOTBALL RECOMMENDATIONS API (NEW)
 // ==========================================
 
-exports.footballRecommendations = onRequest({ cors: true }, async (request, response) => {
+exports.footballRecommendations = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
@@ -243,7 +249,7 @@ exports.footballRecommendations = onRequest({ cors: true }, async (request, resp
 });
 
 
-exports.footballNews = onRequest({ cors: true }, async (request, response) => {
+exports.footballNews = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
@@ -258,3 +264,6 @@ exports.footballNews = onRequest({ cors: true }, async (request, response) => {
         response.status(500).send({ status: "error", message: error.message });
     }
 });
+
+
+export const api = functions.onRequest(settings, app);

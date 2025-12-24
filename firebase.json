@@ -13,4 +13,20 @@
       ]
     }
   ]
+
+  ,
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/downloadSubtitle/**", "function": "downloadSubtitle" },
+      { "source": "/fetchSubtitles/**", "function": "fetchSubtitles" },
+      { "source": "/footballNews/**", "function": "footballNews" },
+      { "source": "/footballRecommendations/**", "function": "footballRecommendations" },
+      { "source": "/footballRequest/**", "function": "footballRequest" },
+      { "source": "/getLocation/**", "function": "getLocation" },
+      { "source": "/getRecommendations/**", "function": "getRecommendations" },
+      { "source": "/searchTrailer/**", "function": "searchTrailer" }
+    ]
+  }
 }
