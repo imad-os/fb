@@ -4,9 +4,10 @@ const footballApis=[
     {"url":"https://v3.football.api-sports.io","host":"v3.football.api-sports.io", "key":"d79fe49364b4f281787947da46201ee3"},
     {"url":"https://api-football-v1.p.rapidapi.com/v3","host":"api-football-v1.p.rapidapi.com", "key":"b7e837cfb4msh0b84d927aa2291dp130d32jsn7b1570d863f8"},
     {"url":"https://api-football-v1.p.rapidapi.com/v3","host":"api-football-v1.p.rapidapi.com", "key":"b3a3d033ffmsh6e94bc1a2adfb2ap197138jsn33bbf80e8bb2"},
+    {"url":"https://v3.football.api-sports.io","host":"v3.football.api-sports.io", "key":"cb397bed4ae3bce1f341cde74671ec94"},//free sub
 ];
 module.exports = {
-    API:footballApis[0],
+    API:footballApis,
 
     // --- SUBTITLES API ---
     SUBTITLES_DOMAIN: "iptv-subtitle.geekspro.us",

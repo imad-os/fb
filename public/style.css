@@ -932,9 +932,9 @@ input:checked + .slider:before {
 .theme-light .stat-item,
 .theme-light .match-details-header,
 .theme-light .team-info-header,
-.theme-light .lineup-team, /* NEW */
-.theme-light .stat-row, /* NEW */
-.theme-light .filter-select /* NEW */
+.theme-light .lineup-team,
+.theme-light .stat-row,
+.theme-light .filter-select
 {
     border: 1px solid var(--border-color);
 }

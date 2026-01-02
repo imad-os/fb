@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xtream Admin Panel</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase Compat SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-auth-compat.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .input-field {
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+            transition: all 0.2s;
+        }
+        .input-field:focus {
+            border-color: #8b5cf6;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+        }
+
+        /* Toast Animation */
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .toast { animation: slideIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col">
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <!-- LOGIN VIEW -->
+    <div id="login-view" class="flex-1 flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-md p-8 rounded-2xl shadow-2xl">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-violet-600/20 mb-4">
+                    <i data-lucide="tv-2" class="w-8 h-8 text-violet-500"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-white">Admin Portal</h1>
+                <p class="text-slate-400 text-sm mt-1">Manage your Xtream Service</p>
+            </div>
+            
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Email</label>
+                    <div class="relative">
+                        <i data-lucide="mail" class="absolute left-3 top-3 w-5 h-5 text-slate-500"></i>
+                        <input type="email" id="email" required class="input-field w-full pl-10 pr-4 py-2.5 rounded-lg" placeholder="admin@example.com">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                    <div class="relative">
+                        <i data-lucide="lock" class="absolute left-3 top-3 w-5 h-5 text-slate-500"></i>
+                        <input type="password" id="password" required class="input-field w-full pl-10 pr-4 py-2.5 rounded-lg" placeholder="••••••••">
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-violet-600 hover:bg-violet-700 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2">
+                    <span id="login-btn-text">Sign In</span>
+                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- DASHBOARD VIEW -->
+    <div id="dashboard-view" class="hidden flex-1 flex h-full">
+        
+        <!-- Sidebar -->
+        <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
+            <div class="p-6 flex items-center gap-3 border-b border-slate-800">
+                <div class="bg-violet-600 p-2 rounded-lg">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5 text-white"></i>
+                </div>
+                <span class="font-bold text-lg tracking-tight">XtreamAdmin</span>
+            </div>
+
+            <nav class="flex-1 p-4 space-y-2">
+                <button onclick="router.navigate('users')" class="nav-item w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all" id="nav-users">
+                    <i data-lucide="users" class="w-5 h-5"></i>
+                    <span>Users</span>
+                </button>
+                <button onclick="router.navigate('streams')" class="nav-item w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all" id="nav-streams">
+                    <i data-lucide="play-circle" class="w-5 h-5"></i>
+                    <span>Streams</span>
+                </button>
+                <button onclick="router.navigate('categories')" class="nav-item w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all" id="nav-categories">
+                    <i data-lucide="folder-tree" class="w-5 h-5"></i>
+                    <span>Categories</span>
+                </button>
+            </nav>
+
+            <div class="p-4 border-t border-slate-800">
+                <button onclick="authManager.logout()" class="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
+                    <i data-lucide="log-out" class="w-5 h-5"></i>
+                    <span>Sign Out</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col overflow-hidden bg-slate-950 relative">
+            <!-- Header -->
+            <header class="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-900/50 backdrop-blur-sm">
+                <h2 id="page-title" class="text-xl font-semibold text-white">Overview</h2>
+                <div class="flex items-center gap-4">
+                    <button id="add-new-btn" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        <span id="add-btn-text">Add New</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <div id="content-area" class="flex-1 overflow-y-auto p-8">
+                <!-- Dynamic Content Injected Here -->
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL (Generic) -->
+    <div id="modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="ui.closeModal()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg">
+            <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+                <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+                    <h3 id="modal-title" class="text-lg font-bold text-white">Edit Item</h3>
+                    <button onclick="ui.closeModal()" class="text-slate-400 hover:text-white">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div id="modal-content" class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                    <!-- Form fields injected here -->
+                </div>
+                <div class="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3">
+                    <button onclick="ui.closeModal()" class="px-4 py-2 text-slate-300 hover:text-white font-medium">Cancel</button>
+                    <button id="modal-save-btn" class="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS (Removed type="module") -->
+    <script>
+        // --- CONFIG ---
+        // appId is no longer needed for the simplified path logic
+        const firebaseConfig = {
+            apiKey: "AIzaSyClgzoMBEKizx-r7abMvAmLgGpk_p748IU",
+            authDomain: "iptv-8b60c.firebaseapp.com",
+            projectId: "iptv-8b60c",
+            storageBucket: "iptv-8b60c.firebasestorage.app",
+            messagingSenderId: "259048691910",
+            appId: "1:259048691910:web:b57f9eeda5546ce4d8dfc7"
+        };
+        // --- INIT FIREBASE (Compat Syntax) ---
+        // Access global vars injected by environment if available, otherwise use localStorage config
+        const finalConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
+        
+        if (!firebase.apps.length) {
+            firebase.initializeApp(finalConfig);
+        }
+        
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // --- STATE ---
+        const state = {
+            currentUser: null,
+            currentView: 'users',
+            data: [],
+            categories: [] // Cache for dropdowns
+        };
+
+        // --- AUTH MANAGER ---
+        const authManager = {
+            init: async () => {
+                // Mandatory environment check
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await auth.signInWithCustomToken(__initial_auth_token);
+                } else {
+                    // We don't force anon sign in here because we want email/pass
+                }
+
+                auth.onAuthStateChanged((user) => {
+                    state.currentUser = user;
+                    if (user) {
+                        document.getElementById('login-view').classList.add('hidden');
+                        document.getElementById('dashboard-view').classList.remove('hidden');
+                        router.navigate('users');
+                    } else {
+                        document.getElementById('login-view').classList.remove('hidden');
+                        document.getElementById('dashboard-view').classList.add('hidden');
+                    }
+                });
+
+                document.getElementById('login-form').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const email = document.getElementById('email').value;
+                    const pass = document.getElementById('password').value;
+                    const btnText = document.getElementById('login-btn-text');
+                    
+                    try {
+                        btnText.textContent = "Signing In...";
+                        await auth.signInWithEmailAndPassword(email, pass);
+                        ui.showToast('Welcome back!', 'success');
+                    } catch (error) {
+                        ui.showToast(error.message, 'error');
+                        btnText.textContent = "Sign In";
+                    }
+                });
+            },
+            logout: () => auth.signOut()
+        };
+
+        // --- DATA MANAGER ---
+        const dataManager = {
+            collectionMap: {
+                users: 'xtream_users',
+                streams: 'xtream_streams',
+                categories: 'xtream_categories'
+            },
+            
+            // Simplified Path Logic
+            getPath: (col) => {
+                return db.collection(col);
+            },
+
+            async fetch(view) {
+                ui.showLoading();
+                try {
+                    const colName = this.collectionMap[view];
+                    const snapshot = await this.getPath(colName).get();
+                    state.data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    // Always fetch categories for dropdowns if not in category view
+                    if (view !== 'categories') {
+                        const catSnap = await this.getPath('xtream_categories').get();
+                        state.categories = catSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    } else {
+                        state.categories = state.data;
+                    }
+
+                    ui.renderTable(view, state.data);
+                } catch (error) {
+                    console.error(error);
+                    ui.showToast('Failed to load data', 'error');
+                } finally {
+                    ui.hideLoading();
+                }
+            },
+
+            async create(view, data) {
+                try {
+                    const colName = this.collectionMap[view];
+                    await this.getPath(colName).add(data);
+                    ui.showToast('Item created successfully', 'success');
+                    this.fetch(view);
+                    ui.closeModal();
+                } catch (error) {
+                    ui.showToast(error.message, 'error');
+                }
+            },
+
+            async update(view, id, data) {
+                try {
+                    const colName = this.collectionMap[view];
+                    await this.getPath(colName).doc(id).update(data);
+                    ui.showToast('Item updated', 'success');
+                    this.fetch(view);
+                    ui.closeModal();
+                } catch (error) {
+                    ui.showToast(error.message, 'error');
+                }
+            },
+
+            async delete(view, id) {
+                if(!confirm('Are you sure you want to delete this item?')) return;
+                try {
+                    const colName = this.collectionMap[view];
+                    await this.getPath(colName).doc(id).delete();
+                    ui.showToast('Item deleted', 'success');
+                    this.fetch(view);
+                } catch (error) {
+                    ui.showToast(error.message, 'error');
+                }
+            }
+        };
+
+        // --- UI MANAGER ---
+        const ui = {
+            showToast(msg, type = 'info') {
+                const container = document.getElementById('toast-container');
+                const el = document.createElement('div');
+                const colors = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-emerald-500' : 'bg-blue-500');
+                el.className = `toast ${colors} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium min-w-[300px]`;
+                el.innerHTML = `
+                    <i data-lucide="${type === 'error' ? 'alert-circle' : 'check-circle'}" class="w-4 h-4"></i>
+                    <span>${msg}</span>
+                `;
+                container.appendChild(el);
+                lucide.createIcons();
+                setTimeout(() => el.remove(), 3000);
+            },
+
+            showLoading() {
+                document.getElementById('content-area').innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-64 text-slate-500">
+                        <i data-lucide="loader-2" class="w-8 h-8 animate-spin mb-2"></i>
+                        <p>Loading Data...</p>
+                    </div>
+                `;
+                lucide.createIcons();
+            },
+            
+            hideLoading() { /* No-op, renderTable overwrites */ },
+
+            closeModal() {
+                document.getElementById('modal').classList.add('hidden');
+            },
+
+            openModal(mode, item = null) {
+                const view = state.currentView;
+                const modal = document.getElementById('modal');
+                const title = document.getElementById('modal-title');
+                const content = document.getElementById('modal-content');
+                const saveBtn = document.getElementById('modal-save-btn');
+
+                title.textContent = mode === 'create' ? `Add New ${view.slice(0,-1)}` : `Edit ${view.slice(0,-1)}`;
+                
+                // Form Generation logic
+                content.innerHTML = this.generateForm(view, item);
+                
+                // Button Logic
+                saveBtn.onclick = () => {
+                    const formData = this.getFormData(view);
+                    if (mode === 'create') dataManager.create(view, formData);
+                    else dataManager.update(view, item.id, formData);
+                };
+
+                modal.classList.remove('hidden');
+                lucide.createIcons();
+            },
+
+            generateForm(view, item) {
+                const val = (key) => item ? (item[key] || '') : '';
+                
+                if (view === 'users') {
+                    // Convert unix timestamp to date input format (YYYY-MM-DD)
+                    let dateVal = '';
+                    if (item && item.exp_date) {
+                         const date = new Date(parseInt(item.exp_date) * 1000);
+                         dateVal = date.toISOString().split('T')[0];
+                    }
+
+                    return `
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Username</label>
+                                <input id="f_username" type="text" value="${val('username')}" class="input-field w-full px-3 py-2 rounded-lg">
+                            </div>
+                            <div>
+                                <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Password</label>
+                                <input id="f_password" type="text" value="${val('password')}" class="input-field w-full px-3 py-2 rounded-lg">
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Max Connections</label>
+                                    <input id="f_max" type="number" value="${val('max_connections') || 1}" class="input-field w-full px-3 py-2 rounded-lg">
+                                </div>
+                                <div>
+                                    <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Status</label>
+                                    <select id="f_status" class="input-field w-full px-3 py-2 rounded-lg">
+                                        <option value="Active" ${val('status') === 'Active' ? 'selected' : ''}>Active</option>
+                                        <option value="Disabled" ${val('status') === 'Disabled' ? 'selected' : ''}>Disabled</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                                <label class="block text-xs uppercase text-violet-400 font-bold mb-1">Subscription Expiry</label>
+                                <div class="flex gap-2 mb-2">
+                                    <input id="f_exp" type="date" value="${dateVal}" class="input-field flex-1 px-3 py-2 rounded-lg">
+                                </div>
+                                <div class="flex gap-2">
+                                    <button type="button" onclick="formHelpers.addTime(1, 'month')" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded transition">+1 Month</button>
+                                    <button type="button" onclick="formHelpers.addTime(3, 'month')" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded transition">+3 Months</button>
+                                    <button type="button" onclick="formHelpers.addTime(1, 'year')" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded transition">+1 Year</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                if (view === 'categories') {
+                    return `
+                         <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Category Name</label>
+                                <input id="f_name" type="text" value="${val('category_name')}" class="input-field w-full px-3 py-2 rounded-lg">
+                            </div>
+                            <div>
+                                <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Type</label>
+                                <select id="f_type" class="input-field w-full px-3 py-2 rounded-lg">
+                                    <option value="live" ${val('type') === 'live' ? 'selected' : ''}>Live TV</option>
+                                    <option value="vod" ${val('type') === 'vod' ? 'selected' : ''}>Movie (VOD)</option>
+                                    <option value="series" ${val('type') === 'series' ? 'selected' : ''}>Series</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Category ID (Optional, Unique)</label>
+                                <input id="f_cat_id" type="number" value="${val('category_id')}" placeholder="Auto-generated if empty" class="input-field w-full px-3 py-2 rounded-lg">
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (view === 'streams') {
+                     const catOptions = state.categories.map(c => 
+                        `<option value="${c.category_id}" ${String(val('category_id')) === String(c.category_id) ? 'selected' : ''}>[${c.type}] ${c.category_name}</option>`
+                    ).join('');
+
+                    return `
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-3 gap-4">
+                                <div class="col-span-2">
+                                    <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Stream Name</label>
+                                    <input id="f_name" type="text" value="${val('name')}" class="input-field w-full px-3 py-2 rounded-lg">
+                                </div>
+                                <div>
+                                    <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Type</label>
+                                    <select id="f_type" class="input-field w-full px-3 py-2 rounded-lg">
+                                        <option value="live" ${val('type') === 'live' ? 'selected' : ''}>Live</option>
+                                        <option value="vod" ${val('type') === 'vod' ? 'selected' : ''}>VOD</option>
+                                        <option value="series" ${val('type') === 'series' ? 'selected' : ''}>Series</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Direct Source URL</label>
+                                <input id="f_source" type="text" value="${val('direct_source')}" class="input-field w-full px-3 py-2 rounded-lg font-mono text-xs">
+                            </div>
+                            <div>
+                                <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Icon URL</label>
+                                <div class="flex gap-2">
+                                    <input id="f_icon" type="text" value="${val('stream_icon')}" class="input-field flex-1 px-3 py-2 rounded-lg font-mono text-xs">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Category</label>
+                                    <select id="f_cat_id" class="input-field w-full px-3 py-2 rounded-lg">
+                                        <option value="0">Uncategorized</option>
+                                        ${catOptions}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Stream ID (Integer)</label>
+                                    <input id="f_stream_id" type="number" value="${val('stream_id')}" class="input-field w-full px-3 py-2 rounded-lg">
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            },
+
+            getFormData(view) {
+                if (view === 'users') {
+                    const dateInput = document.getElementById('f_exp').value;
+                    const timestamp = dateInput ? Math.floor(new Date(dateInput).getTime() / 1000) : null;
+                    return {
+                        username: document.getElementById('f_username').value,
+                        password: document.getElementById('f_password').value,
+                        max_connections: document.getElementById('f_max').value,
+                        status: document.getElementById('f_status').value,
+                        exp_date: timestamp
+                    };
+                }
+                if (view === 'categories') {
+                    return {
+                        category_name: document.getElementById('f_name').value,
+                        type: document.getElementById('f_type').value,
+                        category_id: document.getElementById('f_cat_id').value || Math.floor(Date.now() / 1000), // Generate ID if empty
+                        parent_id: 0
+                    };
+                }
+                if (view === 'streams') {
+                    const type = document.getElementById('f_type').value;
+                    const sid = document.getElementById('f_stream_id').value || Math.floor(Math.random() * 100000);
+                    return {
+                        name: document.getElementById('f_name').value,
+                        type: type,
+                        direct_source: document.getElementById('f_source').value,
+                        stream_icon: document.getElementById('f_icon').value,
+                        category_id: document.getElementById('f_cat_id').value,
+                        stream_id: parseInt(sid),
+                        // Xtream compatibility filler
+                        added: String(Math.floor(Date.now()/1000)),
+                        rating: "0",
+                        num: 0
+                    };
+                }
+            },
+
+            renderTable(view, data) {
+                const area = document.getElementById('content-area');
+                
+                if (data.length === 0) {
+                    area.innerHTML = `
+                        <div class="flex flex-col items-center justify-center h-full text-slate-500">
+                            <i data-lucide="inbox" class="w-12 h-12 mb-4 opacity-50"></i>
+                            <p>No records found in ${view}.</p>
+                        </div>
+                    `;
+                    lucide.createIcons();
+                    return;
+                }
+
+                let header = '';
+                let rows = '';
+
+                if (view === 'users') {
+                    header = `
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Username</th>
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Status</th>
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Expires</th>
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Conns</th>
+                        <th class="text-right py-3 px-4 text-slate-400 font-medium text-xs uppercase">Actions</th>
+                    `;
+                    rows = data.map(d => {
+                        const date = d.exp_date ? new Date(d.exp_date * 1000).toLocaleDateString() : 'Unlimited';
+                        const statusClass = d.status === 'Active' ? 'text-emerald-400 bg-emerald-400/10' : 'text-red-400 bg-red-400/10';
+                        return `
+                        <tr class="border-b border-slate-800 hover:bg-slate-900/50 transition-colors">
+                            <td class="py-3 px-4 font-medium text-white">${d.username}</td>
+                            <td class="py-3 px-4"><span class="px-2 py-1 rounded text-xs font-bold ${statusClass}">${d.status}</span></td>
+                            <td class="py-3 px-4 text-slate-300">${date}</td>
+                            <td class="py-3 px-4 text-slate-300">${d.active_cons || 0} / ${d.max_connections || 1}</td>
+                            <td class="py-3 px-4 text-right">
+                                <button onclick="window.editItem('${d.id}')" class="text-violet-400 hover:text-violet-300 mr-2"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                <button onclick="dataManager.delete('${view}', '${d.id}')" class="text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            </td>
+                        </tr>`;
+                    }).join('');
+                } else if (view === 'streams') {
+                     header = `
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">ID</th>
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Icon</th>
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Name</th>
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Type</th>
+                        <th class="text-right py-3 px-4 text-slate-400 font-medium text-xs uppercase">Actions</th>
+                    `;
+                    rows = data.map(d => `
+                        <tr class="border-b border-slate-800 hover:bg-slate-900/50 transition-colors">
+                             <td class="py-3 px-4 text-slate-500 font-mono text-xs">${d.stream_id}</td>
+                            <td class="py-3 px-4">
+                                <div class="w-8 h-8 rounded bg-slate-800 overflow-hidden">
+                                    <img src="${d.stream_icon}" onerror="this.src='https://placehold.co/100x100?text=?'" class="w-full h-full object-cover">
+                                </div>
+                            </td>
+                            <td class="py-3 px-4 font-medium text-white">${d.name}</td>
+                            <td class="py-3 px-4 text-slate-300 uppercase text-xs">${d.type}</td>
+                            <td class="py-3 px-4 text-right">
+                                <button onclick="window.editItem('${d.id}')" class="text-violet-400 hover:text-violet-300 mr-2"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                <button onclick="dataManager.delete('${view}', '${d.id}')" class="text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            </td>
+                        </tr>`).join('');
+                } else {
+                     header = `
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">ID</th>
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Name</th>
+                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Type</th>
+                        <th class="text-right py-3 px-4 text-slate-400 font-medium text-xs uppercase">Actions</th>
+                    `;
+                    rows = data.map(d => `
+                        <tr class="border-b border-slate-800 hover:bg-slate-900/50 transition-colors">
+                            <td class="py-3 px-4 text-slate-500 font-mono text-xs">${d.category_id}</td>
+                            <td class="py-3 px-4 font-medium text-white">${d.category_name}</td>
+                            <td class="py-3 px-4 text-slate-300 uppercase text-xs">${d.type}</td>
+                            <td class="py-3 px-4 text-right">
+                                <button onclick="window.editItem('${d.id}')" class="text-violet-400 hover:text-violet-300 mr-2"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                                <button onclick="dataManager.delete('${view}', '${d.id}')" class="text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            </td>
+                        </tr>`).join('');
+                }
+
+                area.innerHTML = `
+                    <div class="glass-panel rounded-xl overflow-hidden">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-900 border-b border-slate-800">${header}</thead>
+                            <tbody class="divide-y divide-slate-800">${rows}</tbody>
+                        </table>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+        };
+
+        // --- ROUTER ---
+        const router = {
+            navigate(view) {
+                state.currentView = view;
+                
+                // Update Nav UI
+                document.querySelectorAll('.nav-item').forEach(el => {
+                    el.classList.remove('bg-violet-600', 'text-white');
+                    el.classList.add('text-slate-400');
+                });
+                const activeNav = document.getElementById(`nav-${view}`);
+                if(activeNav) {
+                    activeNav.classList.add('bg-violet-600', 'text-white');
+                    activeNav.classList.remove('text-slate-400', 'hover:bg-slate-800');
+                }
+
+                document.getElementById('page-title').textContent = view.charAt(0).toUpperCase() + view.slice(1);
+                document.getElementById('add-btn-text').textContent = `Add ${view.slice(0,-1)}`; // Remove 's'
+
+                dataManager.fetch(view);
+            }
+        };
+
+        // --- GLOBAL EXPORTS (For HTML Event Handlers) ---
+        window.router = router;
+        window.ui = ui;
+        window.dataManager = dataManager;
+        window.authManager = authManager;
+        
+        // Helper to find item by ID for editing
+        window.editItem = (id) => {
+            const item = state.data.find(i => i.id === id);
+            if(item) ui.openModal('edit', item);
+        };
+
+        // Helper for Date Math in Users Form
+        window.formHelpers = {
+            addTime: (amount, unit) => {
+                const input = document.getElementById('f_exp');
+                let current = input.value ? new Date(input.value) : new Date();
+                
+                if (unit === 'month') current.setMonth(current.getMonth() + amount);
+                if (unit === 'year') current.setFullYear(current.getFullYear() + amount);
+                
+                input.value = current.toISOString().split('T')[0];
+            }
+        };
+
+        // --- GLOBAL LISTENERS ---
+        document.getElementById('add-new-btn').onclick = () => ui.openModal('create');
+
+        // --- STARTUP ---
+        authManager.init();
+
+    </script>
+</body>
+</html>

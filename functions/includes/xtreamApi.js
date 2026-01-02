@@ -3,7 +3,6 @@
 const { getFirestore } = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
 
-const db = getFirestore();
 
 // Helper: Standard default properties for Xtream objects
 // This ensures the App doesn't crash if a field is missing in Firestore
@@ -63,6 +62,7 @@ const XtreamService = {
      */
     async handleRequest(params) {
         const { action, username, password } = params;
+        this.db = getFirestore();
 
         // 1. Authenticate User
         // We skip auth for simple checks if you prefer, but standard XC requires it for everything.
@@ -112,7 +112,7 @@ const XtreamService = {
         if (!username || !password) return null;
 
         try {
-            const usersRef = db.collection('xtream_users');
+            const usersRef = this.db.collection('xtream_users');
             const snapshot = await usersRef
                 .where('username', '==', username)
                 .where('password', '==', password)
@@ -171,7 +171,7 @@ const XtreamService = {
      */
     async getCategories(type) {
         try {
-            const catsRef = db.collection('xtream_categories');
+            const catsRef = this.db.collection('xtream_categories');
             const snapshot = await catsRef.where('type', '==', type).get();
 
             return snapshot.docs.map(doc => {
@@ -194,7 +194,7 @@ const XtreamService = {
      */
     async getStreams(type, categoryId) {
         try {
-            let query = db.collection('xtream_streams').where('type', '==', type);
+            let query = this.db.collection('xtream_streams').where('type', '==', type);
 
             if (categoryId) {
                 query = query.where('category_id', '==', categoryId);
@@ -243,7 +243,7 @@ const XtreamService = {
         // Here we assume streamId matches the document ID or a field 'stream_id'
         // Since we need to find it first:
         try {
-            const streamsRef = db.collection('xtream_streams');
+            const streamsRef = this.db.collection('xtream_streams');
             const snapshot = await streamsRef.where('stream_id', '==', parseInt(streamId)).limit(1).get();
             
             if (snapshot.empty) return {};
@@ -273,7 +273,7 @@ const XtreamService = {
 
         try {
             // 1. Get Series Info
-            const seriesQuery = await db.collection('xtream_streams')
+            const seriesQuery = await this.db.collection('xtream_streams')
                 .where('stream_id', '==', parseInt(seriesId)) // Assuming stream_id holds series_id in your DB
                 .where('type', '==', 'series')
                 .limit(1)
@@ -291,7 +291,7 @@ const XtreamService = {
             // I am assuming episodes are also in 'xtream_streams' but maybe have type='episode' 
             // and a 'parent_id' or 'series_id' pointing to this series.
             
-            const episodesQuery = await db.collection('xtream_streams')
+            const episodesQuery = await this.db.collection('xtream_streams')
                 .where('type', '==', 'episode')
                 .where('series_id', '==', parseInt(seriesId))
                 .orderBy('episode_num', 'asc') // Assuming you have episode_num

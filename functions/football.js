@@ -2,33 +2,46 @@
 
 const axios = require('axios'); 
 const config = require('./config');
+const { error } = require('firebase-functions/logger');
 
 const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 
-const HEADERS = {
-    'x-rapidapi-host': config.API.host,
-    'x-rapidapi-key': config.API.key,
-    "user-agent" : ua,
-    //"authority" : "v3.football.api-sports.io",
-};
 
+let currentApiIndex = 0;
 const FootballService = {
 
-    fetchData: async function(endpoint, params = {}) {
+    fetchData: async function(endpoint, params = {}, recursive=0) {
         const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+        const api = config.API[currentApiIndex];
+        const HEADERS = {
+            'x-rapidapi-host': api.host,
+            'x-rapidapi-key': api.key,
+            "user-agent" : ua,
+        };
+        let response = {};
         try {
-            const fullUrl = `${config.API.url}${cleanEndpoint}`;
+            const fullUrl = `${api.url}${cleanEndpoint}`;
 
-            const response = await axios.get(fullUrl, {
+            response = await axios.get(fullUrl, {
                 headers: HEADERS,
                 params: params
             });
-
-            return response.data;
         } catch (error) {
             console.error(`Football API Error [${cleanEndpoint}]:`, error.message);
-            throw new Error(error.response?.data?.message || "Failed to fetch data from Football Provider");
+            throw new Error(error.response?.data?.message || error || "Failed to fetch data from Football Provider");
         }
+
+        if(recursive<3 && response?.data?.errors && Object.keys(response?.data?.errors).length ){
+            const error_key = Object.keys(response.data.errors)[0];
+            if(error_key !== 'requests' ) {
+                
+            }
+            currentApiIndex = (currentApiIndex + 1) % config.API.length;
+            console.log(`Switching to next Football API Key: Index ${currentApiIndex}`);
+            return this.fetchData(endpoint, params, recursive+1);
+        }
+        return {CAI:currentApiIndex,REC:recursive,...response.data};
+
     },
 
     /**

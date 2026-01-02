@@ -4,13 +4,13 @@ const { initializeApp } = require("firebase-admin/app");
 
 const config = require('./config');
 
-
 // Import Modules
 const SubtitleFetcher = require("./subtitles");
 const FootballService = require("./football");
 const TrailerService = require("./trailer"); 
 const RecommendationService = require("./recommendations");
 const LocationService = require("./location");
+const XtreamService = require("./includes/xtreamApi"); // Import new Local Service
 
 initializeApp();
 
@@ -29,13 +29,12 @@ const applyMiddleware = (req, res) => {
 
 const settings =   {
     region: "europe-west1",
-    //minInstances: 1,
-    //memory: "512MiB",
     cors: true
-  };
+};
+
 
 // ==========================================
-// 5. LOCATION API (NEW)
+// 5. LOCATION API
 // ==========================================
 
 exports.getLocation = onRequest(settings, async (request, response) => {
@@ -99,13 +98,11 @@ exports.searchTrailer = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
-        // Support both Body (POST) and Query (GET)
         const movieName = request.body.movie_name || request.query.movie_name;
         const year = request.body.year || request.query.year;
         const tmdbId = request.body.tmdb_id || request.query.tmdb_id;
         const type = request.body.type || request.query.type || 'movie';
 
-        // Validation
         if (!movieName && !tmdbId) {
             response.status(400).send({ 
                 status: "error", 
@@ -114,10 +111,7 @@ exports.searchTrailer = onRequest(settings, async (request, response) => {
             return;
         }
 
-        // Always returns a result object (e.g. { found: false, ... } or { found: true, ... })
         const result = await TrailerService.searchTrailer(movieName, year, tmdbId, type);
-        
-        // We always send 200 OK so the client can parse the JSON check 'found'
         response.status(200).send(result);
 
     } catch (error) {
@@ -129,8 +123,6 @@ exports.searchTrailer = onRequest(settings, async (request, response) => {
     }
 });
 
-
-
 // ==========================================
 // 4. RECOMMENDATIONS API
 // ==========================================
@@ -139,19 +131,13 @@ exports.getRecommendations = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
-        // Parse Body
         let favorites = request.body.favorites || [];
         let watched = request.body.watched || [];
-        
-        // Params: returnmax (default 20), type (default movie)
-        // Checks both Body and Query string
         let count = parseInt(request.body.returnmax || request.query.returnmax || 20);
         let type = request.body.type || 'movie'; 
 
-        // Safety: Limit max return to 100 to prevent timeout
         if (count > 100) count = 100;
 
-        // Run Logic
         const recommendations = await RecommendationService.getRecommendations(favorites, watched, count, type);
         
         response.status(200).send({
@@ -168,7 +154,6 @@ exports.getRecommendations = onRequest(settings, async (request, response) => {
         });
     }
 });
-
 
 // ==========================================
 // 2. FOOTBALL API
@@ -202,7 +187,7 @@ exports.footballRequest = onRequest(settings, async (request, response) => {
 });
 
 // ==========================================
-// 6. FOOTBALL RECOMMENDATIONS API (NEW)
+// 6. FOOTBALL RECOMMENDATIONS API
 // ==========================================
 
 exports.footballRecommendations = onRequest(settings, async (request, response) => {
@@ -219,8 +204,6 @@ exports.footballRecommendations = onRequest(settings, async (request, response) 
                 country = location.country;
                 city = location.city;
                 continentCode = config.FOOTBALL_CONTINENT_MAP[location.countryCode] || "";
-                
-                logger.info(`Auto-detected: ${country}, ${city}, ${continentCode}`);
             } catch (e) {
                 logger.warn("Location detection failed", e);
             }
@@ -266,4 +249,47 @@ exports.footballNews = onRequest(settings, async (request, response) => {
 });
 
 
-export const api = functions.onRequest(settings, app);
+// ==========================================
+// 7. XTREAM CODES API (LOCAL FIRESTORE)
+// ==========================================
+
+exports.xtreamRequest = onRequest(settings, async (request, response) => {
+    if (applyMiddleware(request, response)) return;
+
+    try {
+        // Support both GET (query params) and POST (body)
+        // Standard XC API uses GET with query params (username, password, action)
+        const params = request.method === 'GET' ? request.query : request.body;
+        
+        const action = params.action;
+
+        if (!action) {
+             // If no action is provided, but auth is present, standard behavior is often to return user info
+             // But here we'll require an action or default to user info
+             if(params.username && params.password) {
+                 params.action = 'get_user_info';
+             } else {
+                response.status(400).send({ status: "error", message: "Missing 'action' parameter" });
+                return;
+             }
+        }
+
+        const data = await XtreamService.handleRequest(params);
+        
+        // XC API simply returns the JSON object, not wrapped in { status: "success" } usually,
+        // but it depends on the specific call.
+        // Categories/Streams -> Array
+        // User Info -> Object
+        
+        response.status(200).send(data);
+
+    } catch (error) {
+        logger.error("Xtream API Error:", error);
+        // If auth fails, standard XC might return null or specific error, but we send 401/500
+        if (error.message === "Authentication failed") {
+             response.status(401).send({ status: "error", message: "Authentication Failed" });
+        } else {
+             response.status(500).send({ status: "error", message: error.message });
+        }
+    }
+});

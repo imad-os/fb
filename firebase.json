@@ -26,7 +26,8 @@
       { "source": "/footballRequest/**", "function": "footballRequest" },
       { "source": "/getLocation/**", "function": "getLocation" },
       { "source": "/getRecommendations/**", "function": "getRecommendations" },
-      { "source": "/searchTrailer/**", "function": "searchTrailer" }
+      { "source": "/searchTrailer/**", "function": "searchTrailer" },
+      { "source": "/xtream/**", "function": "xtreamRequest" }
     ]
   }
 }
