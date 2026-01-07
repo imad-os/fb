@@ -256,18 +256,56 @@ exports.footballNews = onRequest(settings, async (request, response) => {
 exports.xtreamRequest = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
+    // --- STREAM HANDLING LOGIC ---
+    // Detects URL pattern: /xtream/movie/username/password/streamID.mp4
+    const pathSegments = request.path.split('/').filter(p => p);
+    
+    // ADJUSTMENT: The hosting rewrite adds "xtream" to the start of pathSegments.
+    // We normalize this by removing "xtream" if it exists at index 0.
+    // Example: ['xtream', 'movie', 'user', 'pass', 'id.mp4'] -> ['movie', 'user', 'pass', 'id.mp4']
+    let segments = pathSegments;
+    if (segments.length > 0 && segments[0] === 'xtream') {
+        segments = segments.slice(1);
+    }
+
+    // Check for standard XC stream pattern (4 parts: type/user/pass/id.ext)
+    if (segments.length === 4) {
+        const [type, username, password, file] = segments;
+        
+        // Only handle specific types to avoid conflicting with other routes
+        if (['movie', 'live'].includes(type)) {
+            try {
+                // Extract ID from "23802.mp4" -> "23802"
+                const streamId = file.split('.')[0];
+                
+                const directSource = await XtreamService.getStreamDirectSource(username, password, streamId, type);
+                
+                if (directSource) {
+                    response.redirect(directSource);
+                } else {
+                    response.status(404).send("Stream source not found");
+                }
+                return; // Stop execution here for streams
+            } catch (err) {
+                logger.error("Stream Fetch Error", err);
+                response.status(500).send("Error fetching stream");
+                return;
+            }
+        }
+    }
+    // -----------------------------
+
     try {
-        // Support both GET (query params) and POST (body)
         // Standard XC API uses GET with query params (username, password, action)
         const params = request.method === 'GET' ? request.query : request.body;
         
-        const action = params.action;
+        let action = params.action;
 
         if (!action) {
              // If no action is provided, but auth is present, standard behavior is often to return user info
-             // But here we'll require an action or default to user info
              if(params.username && params.password) {
-                 params.action = 'get_user_info';
+                 action = 'get_user_info';
+                 params.action = action;
              } else {
                 response.status(400).send({ status: "error", message: "Missing 'action' parameter" });
                 return;
@@ -275,12 +313,6 @@ exports.xtreamRequest = onRequest(settings, async (request, response) => {
         }
 
         const data = await XtreamService.handleRequest(params);
-        
-        // XC API simply returns the JSON object, not wrapped in { status: "success" } usually,
-        // but it depends on the specific call.
-        // Categories/Streams -> Array
-        // User Info -> Object
-        
         response.status(200).send(data);
 
     } catch (error) {

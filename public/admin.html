@@ -130,7 +130,11 @@
             <!-- Header -->
             <header class="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-900/50 backdrop-blur-sm">
                 <h2 id="page-title" class="text-xl font-semibold text-white">Overview</h2>
-                <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <button id="import-m3u-btn" class="hidden bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors border border-slate-700">
+                        <i data-lucide="file-up" class="w-4 h-4"></i>
+                        <span>Import M3U</span>
+                    </button>
                     <button id="add-new-btn" class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
                         <i data-lucide="plus" class="w-4 h-4"></i>
                         <span id="add-btn-text">Add New</span>
@@ -159,7 +163,7 @@
                 <div id="modal-content" class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                     <!-- Form fields injected here -->
                 </div>
-                <div class="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3">
+                <div id="modal-footer" class="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3">
                     <button onclick="ui.closeModal()" class="px-4 py-2 text-slate-300 hover:text-white font-medium">Cancel</button>
                     <button id="modal-save-btn" class="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors">Save</button>
                 </div>
@@ -167,10 +171,56 @@
         </div>
     </div>
 
-    <!-- SCRIPTS (Removed type="module") -->
+    <!-- M3U IMPORT MODAL -->
+    <div id="m3u-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="ui.closeM3UModal()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl">
+            <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
+                <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-white">Import Channels from M3U</h3>
+                    <button onclick="ui.closeM3UModal()" class="text-slate-400 hover:text-white">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Target Category</label>
+                            <select id="m3u-category" class="input-field w-full px-3 py-2 rounded-lg"></select>
+                        </div>
+                        <div>
+                            <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Stream Type</label>
+                            <select id="m3u-type" class="input-field w-full px-3 py-2 rounded-lg">
+                                <option value="live">Live TV</option>
+                                <option value="vod">Movie (VOD)</option>
+                                <option value="series">Series</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs uppercase text-slate-500 font-bold mb-1">M3U Content</label>
+                        <textarea id="m3u-content" rows="10" placeholder="#EXTM3U&#10;#EXTINF:-1,Channel Name&#10;http://example.com/stream" class="input-field w-full px-3 py-2 rounded-lg font-mono text-xs resize-none"></textarea>
+                    </div>
+                    <div id="m3u-progress" class="hidden">
+                        <div class="flex justify-between text-xs text-slate-400 mb-1">
+                            <span id="m3u-progress-text">Importing...</span>
+                            <span id="m3u-progress-count">0/0</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div id="m3u-progress-bar" class="bg-violet-500 h-full w-0 transition-all duration-300"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3">
+                    <button onclick="ui.closeM3UModal()" class="px-4 py-2 text-slate-300 hover:text-white font-medium">Cancel</button>
+                    <button id="m3u-parse-btn" class="px-6 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium transition-colors">Start Import</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- CONFIG ---
-        // appId is no longer needed for the simplified path logic
         const firebaseConfig = {
             apiKey: "AIzaSyClgzoMBEKizx-r7abMvAmLgGpk_p748IU",
             authDomain: "iptv-8b60c.firebaseapp.com",
@@ -179,8 +229,7 @@
             messagingSenderId: "259048691910",
             appId: "1:259048691910:web:b57f9eeda5546ce4d8dfc7"
         };
-        // --- INIT FIREBASE (Compat Syntax) ---
-        // Access global vars injected by environment if available, otherwise use localStorage config
+        
         const finalConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
         
         if (!firebase.apps.length) {
@@ -195,17 +244,14 @@
             currentUser: null,
             currentView: 'users',
             data: [],
-            categories: [] // Cache for dropdowns
+            categories: []
         };
 
         // --- AUTH MANAGER ---
         const authManager = {
             init: async () => {
-                // Mandatory environment check
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await auth.signInWithCustomToken(__initial_auth_token);
-                } else {
-                    // We don't force anon sign in here because we want email/pass
                 }
 
                 auth.onAuthStateChanged((user) => {
@@ -247,10 +293,7 @@
                 categories: 'xtream_categories'
             },
             
-            // Simplified Path Logic
-            getPath: (col) => {
-                return db.collection(col);
-            },
+            getPath: (col) => db.collection(col),
 
             async fetch(view) {
                 ui.showLoading();
@@ -259,13 +302,8 @@
                     const snapshot = await this.getPath(colName).get();
                     state.data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     
-                    // Always fetch categories for dropdowns if not in category view
-                    if (view !== 'categories') {
-                        const catSnap = await this.getPath('xtream_categories').get();
-                        state.categories = catSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    } else {
-                        state.categories = state.data;
-                    }
+                    const catSnap = await this.getPath('xtream_categories').get();
+                    state.categories = catSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
                     ui.renderTable(view, state.data);
                 } catch (error) {
@@ -276,15 +314,18 @@
                 }
             },
 
-            async create(view, data) {
+            async create(view, data, silent = false) {
                 try {
                     const colName = this.collectionMap[view];
                     await this.getPath(colName).add(data);
-                    ui.showToast('Item created successfully', 'success');
-                    this.fetch(view);
-                    ui.closeModal();
+                    if (!silent) {
+                        ui.showToast('Item created successfully', 'success');
+                        this.fetch(view);
+                        ui.closeModal();
+                    }
                 } catch (error) {
-                    ui.showToast(error.message, 'error');
+                    if (!silent) ui.showToast(error.message, 'error');
+                    throw error;
                 }
             },
 
@@ -339,7 +380,7 @@
                 lucide.createIcons();
             },
             
-            hideLoading() { /* No-op, renderTable overwrites */ },
+            hideLoading() { },
 
             closeModal() {
                 document.getElementById('modal').classList.add('hidden');
@@ -353,11 +394,8 @@
                 const saveBtn = document.getElementById('modal-save-btn');
 
                 title.textContent = mode === 'create' ? `Add New ${view.slice(0,-1)}` : `Edit ${view.slice(0,-1)}`;
-                
-                // Form Generation logic
                 content.innerHTML = this.generateForm(view, item);
                 
-                // Button Logic
                 saveBtn.onclick = () => {
                     const formData = this.getFormData(view);
                     if (mode === 'create') dataManager.create(view, formData);
@@ -368,11 +406,25 @@
                 lucide.createIcons();
             },
 
+            openM3UModal() {
+                const catSelect = document.getElementById('m3u-category');
+                catSelect.innerHTML = '<option value="0">Uncategorized</option>' + 
+                    state.categories.map(c => `<option value="${c.category_id}">${c.category_name} [${c.type}]</option>`).join('');
+                
+                document.getElementById('m3u-content').value = '';
+                document.getElementById('m3u-progress').classList.add('hidden');
+                document.getElementById('m3u-modal').classList.remove('hidden');
+                lucide.createIcons();
+            },
+
+            closeM3UModal() {
+                document.getElementById('m3u-modal').classList.add('hidden');
+            },
+
             generateForm(view, item) {
                 const val = (key) => item ? (item[key] || '') : '';
                 
                 if (view === 'users') {
-                    // Convert unix timestamp to date input format (YYYY-MM-DD)
                     let dateVal = '';
                     if (item && item.exp_date) {
                          const date = new Date(parseInt(item.exp_date) * 1000);
@@ -433,7 +485,7 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Category ID (Optional, Unique)</label>
+                                <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Category ID</label>
                                 <input id="f_cat_id" type="number" value="${val('category_id')}" placeholder="Auto-generated if empty" class="input-field w-full px-3 py-2 rounded-lg">
                             </div>
                         </div>
@@ -467,9 +519,7 @@
                             </div>
                             <div>
                                 <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Icon URL</label>
-                                <div class="flex gap-2">
-                                    <input id="f_icon" type="text" value="${val('stream_icon')}" class="input-field flex-1 px-3 py-2 rounded-lg font-mono text-xs">
-                                </div>
+                                <input id="f_icon" type="text" value="${val('stream_icon')}" class="input-field w-full px-3 py-2 rounded-lg font-mono text-xs">
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
@@ -480,7 +530,7 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Stream ID (Integer)</label>
+                                    <label class="block text-xs uppercase text-slate-500 font-bold mb-1">Stream ID</label>
                                     <input id="f_stream_id" type="number" value="${val('stream_id')}" class="input-field w-full px-3 py-2 rounded-lg">
                                 </div>
                             </div>
@@ -496,7 +546,7 @@
                     return {
                         username: document.getElementById('f_username').value,
                         password: document.getElementById('f_password').value,
-                        max_connections: document.getElementById('f_max').value,
+                        max_connections: parseInt(document.getElementById('f_max').value),
                         status: document.getElementById('f_status').value,
                         exp_date: timestamp
                     };
@@ -505,7 +555,7 @@
                     return {
                         category_name: document.getElementById('f_name').value,
                         type: document.getElementById('f_type').value,
-                        category_id: document.getElementById('f_cat_id').value || Math.floor(Date.now() / 1000), // Generate ID if empty
+                        category_id: parseInt(document.getElementById('f_cat_id').value) || Math.floor(Date.now() / 1000),
                         parent_id: 0
                     };
                 }
@@ -517,9 +567,8 @@
                         type: type,
                         direct_source: document.getElementById('f_source').value,
                         stream_icon: document.getElementById('f_icon').value,
-                        category_id: document.getElementById('f_cat_id').value,
+                        category_id: parseInt(document.getElementById('f_cat_id').value),
                         stream_id: parseInt(sid),
-                        // Xtream compatibility filler
                         added: String(Math.floor(Date.now()/1000)),
                         rating: "0",
                         num: 0
@@ -529,95 +578,99 @@
 
             renderTable(view, data) {
                 const area = document.getElementById('content-area');
-                
                 if (data.length === 0) {
-                    area.innerHTML = `
-                        <div class="flex flex-col items-center justify-center h-full text-slate-500">
-                            <i data-lucide="inbox" class="w-12 h-12 mb-4 opacity-50"></i>
-                            <p>No records found in ${view}.</p>
-                        </div>
-                    `;
+                    area.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-slate-500"><i data-lucide="inbox" class="w-12 h-12 mb-4 opacity-50"></i><p>No records found in ${view}.</p></div>`;
                     lucide.createIcons();
                     return;
                 }
 
-                let header = '';
-                let rows = '';
-
+                let header = '', rows = '';
                 if (view === 'users') {
-                    header = `
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Username</th>
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Status</th>
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Expires</th>
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Conns</th>
-                        <th class="text-right py-3 px-4 text-slate-400 font-medium text-xs uppercase">Actions</th>
-                    `;
+                    header = `<th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Username</th><th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Status</th><th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Expires</th><th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Conns</th><th class="text-right py-3 px-4 text-slate-400 font-medium text-xs uppercase">Actions</th>`;
                     rows = data.map(d => {
                         const date = d.exp_date ? new Date(d.exp_date * 1000).toLocaleDateString() : 'Unlimited';
                         const statusClass = d.status === 'Active' ? 'text-emerald-400 bg-emerald-400/10' : 'text-red-400 bg-red-400/10';
-                        return `
-                        <tr class="border-b border-slate-800 hover:bg-slate-900/50 transition-colors">
-                            <td class="py-3 px-4 font-medium text-white">${d.username}</td>
-                            <td class="py-3 px-4"><span class="px-2 py-1 rounded text-xs font-bold ${statusClass}">${d.status}</span></td>
-                            <td class="py-3 px-4 text-slate-300">${date}</td>
-                            <td class="py-3 px-4 text-slate-300">${d.active_cons || 0} / ${d.max_connections || 1}</td>
-                            <td class="py-3 px-4 text-right">
-                                <button onclick="window.editItem('${d.id}')" class="text-violet-400 hover:text-violet-300 mr-2"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                                <button onclick="dataManager.delete('${view}', '${d.id}')" class="text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                            </td>
-                        </tr>`;
+                        return `<tr class="border-b border-slate-800 hover:bg-slate-900/50"><td class="py-3 px-4 font-medium text-white">${d.username}</td><td class="py-3 px-4"><span class="px-2 py-1 rounded text-xs font-bold ${statusClass}">${d.status}</span></td><td class="py-3 px-4 text-slate-300">${date}</td><td class="py-3 px-4 text-slate-300">${d.active_cons || 0} / ${d.max_connections || 1}</td><td class="py-3 px-4 text-right"><button onclick="window.editItem('${d.id}')" class="text-violet-400 mr-2"><i data-lucide="edit-2" class="w-4 h-4"></i></button><button onclick="dataManager.delete('${view}', '${d.id}')" class="text-red-400"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td></tr>`;
                     }).join('');
                 } else if (view === 'streams') {
-                     header = `
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">ID</th>
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Icon</th>
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Name</th>
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Type</th>
-                        <th class="text-right py-3 px-4 text-slate-400 font-medium text-xs uppercase">Actions</th>
-                    `;
-                    rows = data.map(d => `
-                        <tr class="border-b border-slate-800 hover:bg-slate-900/50 transition-colors">
-                             <td class="py-3 px-4 text-slate-500 font-mono text-xs">${d.stream_id}</td>
-                            <td class="py-3 px-4">
-                                <div class="w-8 h-8 rounded bg-slate-800 overflow-hidden">
-                                    <img src="${d.stream_icon}" onerror="this.src='https://placehold.co/100x100?text=?'" class="w-full h-full object-cover">
-                                </div>
-                            </td>
-                            <td class="py-3 px-4 font-medium text-white">${d.name}</td>
-                            <td class="py-3 px-4 text-slate-300 uppercase text-xs">${d.type}</td>
-                            <td class="py-3 px-4 text-right">
-                                <button onclick="window.editItem('${d.id}')" class="text-violet-400 hover:text-violet-300 mr-2"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                                <button onclick="dataManager.delete('${view}', '${d.id}')" class="text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                            </td>
-                        </tr>`).join('');
+                    header = `<th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">ID</th><th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Icon</th><th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Name</th><th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Type</th><th class="text-right py-3 px-4 text-slate-400 font-medium text-xs uppercase">Actions</th>`;
+                    rows = data.map(d => `<tr class="border-b border-slate-800 hover:bg-slate-900/50"><td class="py-3 px-4 text-slate-500 font-mono text-xs">${d.stream_id}</td><td class="py-3 px-4"><img src="${d.stream_icon}" onerror="this.src='https://placehold.co/40?text=?'" class="w-8 h-8 rounded object-cover"></td><td class="py-3 px-4 font-medium text-white">${d.name}</td><td class="py-3 px-4 text-slate-300 uppercase text-xs">${d.type}</td><td class="py-3 px-4 text-right"><button onclick="window.editItem('${d.id}')" class="text-violet-400 mr-2"><i data-lucide="edit-2" class="w-4 h-4"></i></button><button onclick="dataManager.delete('${view}', '${d.id}')" class="text-red-400"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td></tr>`).join('');
                 } else {
-                     header = `
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">ID</th>
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Name</th>
-                        <th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Type</th>
-                        <th class="text-right py-3 px-4 text-slate-400 font-medium text-xs uppercase">Actions</th>
-                    `;
-                    rows = data.map(d => `
-                        <tr class="border-b border-slate-800 hover:bg-slate-900/50 transition-colors">
-                            <td class="py-3 px-4 text-slate-500 font-mono text-xs">${d.category_id}</td>
-                            <td class="py-3 px-4 font-medium text-white">${d.category_name}</td>
-                            <td class="py-3 px-4 text-slate-300 uppercase text-xs">${d.type}</td>
-                            <td class="py-3 px-4 text-right">
-                                <button onclick="window.editItem('${d.id}')" class="text-violet-400 hover:text-violet-300 mr-2"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                                <button onclick="dataManager.delete('${view}', '${d.id}')" class="text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                            </td>
-                        </tr>`).join('');
+                    header = `<th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">ID</th><th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Name</th><th class="text-left py-3 px-4 text-slate-400 font-medium text-xs uppercase">Type</th><th class="text-right py-3 px-4 text-slate-400 font-medium text-xs uppercase">Actions</th>`;
+                    rows = data.map(d => `<tr class="border-b border-slate-800 hover:bg-slate-900/50"><td class="py-3 px-4 text-slate-500 font-mono text-xs">${d.category_id}</td><td class="py-3 px-4 font-medium text-white">${d.category_name}</td><td class="py-3 px-4 text-slate-300 uppercase text-xs">${d.type}</td><td class="py-3 px-4 text-right"><button onclick="window.editItem('${d.id}')" class="text-violet-400 mr-2"><i data-lucide="edit-2" class="w-4 h-4"></i></button><button onclick="dataManager.delete('${view}', '${d.id}')" class="text-red-400"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td></tr>`).join('');
                 }
 
-                area.innerHTML = `
-                    <div class="glass-panel rounded-xl overflow-hidden">
-                        <table class="w-full text-sm">
-                            <thead class="bg-slate-900 border-b border-slate-800">${header}</thead>
-                            <tbody class="divide-y divide-slate-800">${rows}</tbody>
-                        </table>
-                    </div>
-                `;
+                area.innerHTML = `<div class="glass-panel rounded-xl overflow-hidden"><table class="w-full text-sm"><thead class="bg-slate-900 border-b border-slate-800">${header}</thead><tbody class="divide-y divide-slate-800">${rows}</tbody></table></div>`;
                 lucide.createIcons();
+            }
+        };
+
+        // --- M3U PARSER ---
+        const m3uParser = {
+            async parse() {
+                const content = document.getElementById('m3u-content').value;
+                const categoryId = parseInt(document.getElementById('m3u-category').value);
+                const streamType = document.getElementById('m3u-type').value;
+                
+                if (!content.trim()) return ui.showToast('Please paste M3U content', 'error');
+
+                const lines = content.split('\n');
+                const channels = [];
+                let currentChannel = null;
+
+                for (let line of lines) {
+                    line = line.trim();
+                    if (line.startsWith('#EXTINF:')) {
+                        // Extract name and potentially icon
+                        const nameMatch = line.match(/,(.*)$/);
+                        const logoMatch = line.match(/tvg-logo="([^"]*)"/);
+                        currentChannel = {
+                            name: nameMatch ? nameMatch[1].trim() : 'Unknown Channel',
+                            stream_icon: logoMatch ? logoMatch[1] : '',
+                            category_id: categoryId,
+                            type: streamType,
+                            added: String(Math.floor(Date.now()/1000)),
+                            rating: "0",
+                            num: 0
+                        };
+                    } else if (line.startsWith('http') && currentChannel) {
+                        currentChannel.direct_source = line;
+                        currentChannel.stream_id = Math.floor(Math.random() * 1000000);
+                        channels.push(currentChannel);
+                        currentChannel = null;
+                    }
+                }
+
+                if (channels.length === 0) return ui.showToast('No valid channels found in M3U', 'error');
+
+                // Progress UI
+                const progressDiv = document.getElementById('m3u-progress');
+                const progressBar = document.getElementById('m3u-progress-bar');
+                const progressCount = document.getElementById('m3u-progress-count');
+                const parseBtn = document.getElementById('m3u-parse-btn');
+
+                progressDiv.classList.remove('hidden');
+                parseBtn.disabled = true;
+                parseBtn.classList.add('opacity-50');
+
+                let count = 0;
+                for (const ch of channels) {
+                    try {
+                        await dataManager.create('streams', ch, true);
+                        count++;
+                        const percent = (count / channels.length) * 100;
+                        progressBar.style.width = `${percent}%`;
+                        progressCount.textContent = `${count}/${channels.length}`;
+                    } catch (e) {
+                        console.error('Failed to import', ch.name, e);
+                    }
+                }
+
+                ui.showToast(`Successfully imported ${count} channels`, 'success');
+                ui.closeM3UModal();
+                dataManager.fetch('streams');
+                parseBtn.disabled = false;
+                parseBtn.classList.remove('opacity-50');
             }
         };
 
@@ -625,8 +678,6 @@
         const router = {
             navigate(view) {
                 state.currentView = view;
-                
-                // Update Nav UI
                 document.querySelectorAll('.nav-item').forEach(el => {
                     el.classList.remove('bg-violet-600', 'text-white');
                     el.classList.add('text-slate-400');
@@ -638,43 +689,43 @@
                 }
 
                 document.getElementById('page-title').textContent = view.charAt(0).toUpperCase() + view.slice(1);
-                document.getElementById('add-btn-text').textContent = `Add ${view.slice(0,-1)}`; // Remove 's'
+                document.getElementById('add-btn-text').textContent = `Add ${view.slice(0,-1)}`;
+
+                // Show/Hide M3U Import Button based on view
+                const m3uBtn = document.getElementById('import-m3u-btn');
+                if (view === 'streams') m3uBtn.classList.remove('hidden');
+                else m3uBtn.classList.add('hidden');
 
                 dataManager.fetch(view);
             }
         };
 
-        // --- GLOBAL EXPORTS (For HTML Event Handlers) ---
+        // --- GLOBAL EXPORTS ---
         window.router = router;
         window.ui = ui;
         window.dataManager = dataManager;
         window.authManager = authManager;
-        
-        // Helper to find item by ID for editing
         window.editItem = (id) => {
             const item = state.data.find(i => i.id === id);
             if(item) ui.openModal('edit', item);
         };
-
-        // Helper for Date Math in Users Form
         window.formHelpers = {
             addTime: (amount, unit) => {
                 const input = document.getElementById('f_exp');
                 let current = input.value ? new Date(input.value) : new Date();
-                
                 if (unit === 'month') current.setMonth(current.getMonth() + amount);
                 if (unit === 'year') current.setFullYear(current.getFullYear() + amount);
-                
                 input.value = current.toISOString().split('T')[0];
             }
         };
 
         // --- GLOBAL LISTENERS ---
         document.getElementById('add-new-btn').onclick = () => ui.openModal('create');
+        document.getElementById('import-m3u-btn').onclick = () => ui.openM3UModal();
+        document.getElementById('m3u-parse-btn').onclick = () => m3uParser.parse();
 
         // --- STARTUP ---
         authManager.init();
-
     </script>
 </body>
 </html>

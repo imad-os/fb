@@ -65,7 +65,6 @@ const XtreamService = {
         this.db = getFirestore();
 
         // 1. Authenticate User
-        // We skip auth for simple checks if you prefer, but standard XC requires it for everything.
         const userInfo = await this.authenticateUser(username, password);
         if (!userInfo) {
             throw new Error("Authentication failed");
@@ -112,6 +111,9 @@ const XtreamService = {
         if (!username || !password) return null;
 
         try {
+            // Ensure DB is initialized if called directly
+            if (!this.db) this.db = getFirestore();
+
             const usersRef = this.db.collection('xtream_users');
             const snapshot = await usersRef
                 .where('username', '==', username)
@@ -125,6 +127,41 @@ const XtreamService = {
             return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
         } catch (error) {
             logger.error("Auth Error", error);
+            return null;
+        }
+    },
+
+    /**
+     * Fetch direct source for a stream (Live/VOD)
+     */
+    async getStreamDirectSource(username, password, streamId, typeStr) {
+        this.db = getFirestore();
+
+        // 1. Auth
+        const user = await this.authenticateUser(username, password);
+        if (!user) return null;
+
+        // 2. Map URL type to DB type
+        // URL 'movie' -> DB 'vod'
+        // URL 'live'  -> DB 'live'
+        let dbType = typeStr;
+        if (typeStr === 'movie') dbType = 'vod';
+
+        try {
+            const streamsRef = this.db.collection('xtream_streams');
+            const snapshot = await streamsRef
+                .where('stream_id', '==', parseInt(streamId))
+                .where('type', '==', dbType)
+                .limit(1)
+                .get();
+
+            if (snapshot.empty) return null;
+
+            const data = snapshot.docs[0].data();
+            return data.direct_source || null;
+
+        } catch (error) {
+            logger.error("Error fetching stream source", error);
             return null;
         }
     },
@@ -283,14 +320,6 @@ const XtreamService = {
             const seriesData = seriesQuery.docs[0].data();
 
             // 2. Get Episodes
-            // Assumption: Episodes are stored in 'xtream_streams' with type='episode' and a field 'series_id' linking them
-            // OR strictly following user prompt: "xtream_streams // name, stream_id, ep_id..."
-            // We will look for items with matching series_id (parent)
-            
-            // NOTE: Since you didn't specify an 'episodes' collection, 
-            // I am assuming episodes are also in 'xtream_streams' but maybe have type='episode' 
-            // and a 'parent_id' or 'series_id' pointing to this series.
-            
             const episodesQuery = await this.db.collection('xtream_streams')
                 .where('type', '==', 'episode')
                 .where('series_id', '==', parseInt(seriesId))
