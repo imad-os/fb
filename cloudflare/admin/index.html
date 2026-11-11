@@ -113,6 +113,12 @@ pre.share { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg
 .checks label { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
 .checks label:has(input:checked) { border-color: var(--accent); background: rgba(124,108,255,.08); }
 .quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+tr.off td:not(.act) { opacity: .5; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--line); margin-right: 6px; vertical-align: 1px; flex: none; }
+.dot.up { background: var(--ok); } .dot.down { background: var(--err); } .dot.na { background: var(--warn); }
+.check-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 14px; }
+.check-stats div { background: var(--panel-2); border-radius: 8px; padding: 10px 12px; }
+.check-stats b { display: block; font-size: 22px; }
 .progress { height: 6px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
 .progress div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 
@@ -166,6 +172,8 @@ dialog form { display: flex; flex-direction: column; max-height: calc(100vh - 34
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7L20 8"/><path d="M20 3v5h-5"/></symbol>
   <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/></symbol>
 </svg>
 
@@ -276,7 +284,7 @@ const API = {
 // ---------------------------------------------------------------- state
 const S = {
   email: "", lists: [], list: store.get("xa_list", DEFAULT_LIST), users: null, cats: {}, streams: {}, settings: {},
-  ui: { type: store.get("xa_type", "live"), cat: "", q: "", shown: PAGE, allUsers: store.get("xa_all", "0") === "1", catType: "live", linkUser: "" }
+  ui: { type: store.get("xa_type", "live"), cat: "", st: "", q: "", shown: PAGE, allUsers: store.get("xa_all", "0") === "1", catType: "live", linkUser: "" }
 };
 const curList = () => S.lists.find((l) => l.id === S.list) || { id: S.list, name: S.list };
 const userLists = (u) => u.lists || [];
@@ -530,10 +538,12 @@ Views.streams = async () => {
   const catName = Object.fromEntries(cats.map((c) => [String(c.id), c.name]));
   const seriesName = Object.fromEntries(series.map((s) => [String(s.id), s.name]));
   const q = S.ui.q.toLowerCase();
-  const list = rows.filter((s) => (!S.ui.cat || String(type === "episode" ? s.series_id : s.category_id) === S.ui.cat) && (!q || s.name.toLowerCase().includes(q) || String(s.id) === q));
+  const list = rows.filter((s) => (!S.ui.cat || String(type === "episode" ? s.series_id : s.category_id) === S.ui.cat) && (!q || s.name.toLowerCase().includes(q) || String(s.id) === q) && stMatch(s));
   const shown = list.slice(0, S.ui.shown);
+  const checkable = type !== "series";
   return `
   <div class="head"><div class="grow"><h1>Streams</h1><p>${esc(curList().name)}: channels, movies, series and their episodes.</p></div>
+    ${checkable ? `<button class="ghost" id="check" ${list.length ? "" : "disabled"} title="Checks the ${list.length} streams shown below">${icon("pulse")}Check ${list.length === rows.length ? "all" : list.length}</button>` : ""}
     <button class="ghost" id="import">${icon("upload")}Import M3U</button>
     <button id="add-stream">${icon("plus")}Add ${ONE[type]}</button></div>
   <div class="card flush">
@@ -542,16 +552,17 @@ Views.streams = async () => {
       <select id="cat" aria-label="Category">${type === "episode"
         ? `<option value="">All series</option>${series.map((s) => `<option value="${s.id}" ${S.ui.cat === String(s.id) ? "selected" : ""}>${esc(s.name)}</option>`).join("")}`
         : `<option value="">All categories</option>${myCats.map((c) => `<option value="${c.id}" ${S.ui.cat === String(c.id) ? "selected" : ""}>${esc(c.name)}</option>`).join("")}`}</select>
+      ${checkable ? `<select id="st" aria-label="State">${Object.entries(ST_FILTERS).map(([k, v]) => `<option value="${k}" ${S.ui.st === k ? "selected" : ""}>${v}</option>`).join("")}</select>` : ""}
       <input type="search" id="q" placeholder="Search by name or ID" value="${esc(S.ui.q)}">
       <span class="muted small">${list.length} of ${rows.length}</span>
     </div>
     ${shown.length ? `<div class="tbl"><table><thead><tr><th style="width:52px"></th><th>Name</th><th class="hide-sm">${type === "episode" ? "Series" : "Category"}</th><th class="num hide-sm">ID</th><th></th></tr></thead><tbody>
-    ${shown.map((s) => `<tr>
+    ${shown.map((s) => `<tr class="${s.enabled === 0 ? "off" : ""}">
       <td>${s.icon ? `<img class="thumb" loading="lazy" alt="" src="${esc(s.icon)}" onerror="this.style.visibility='hidden'">` : '<div class="thumb"></div>'}</td>
-      <td><div class="name">${esc(s.name)}${type === "episode" ? ` <span class="muted small">S${esc(s.season || 1)} E${esc(s.episode || 1)}</span>` : ""}</div><div class="sub mono">${esc(type === "series" ? s.plot : s.source)}</div></td>
+      <td><div class="name">${checkable ? checkDot(s) : ""}${esc(s.name)}${type === "episode" ? ` <span class="muted small">S${esc(s.season || 1)} E${esc(s.episode || 1)}</span>` : ""}${s.enabled === 0 ? ' <span class="badge err">Off</span>' : ""}</div><div class="sub mono">${esc(type === "series" ? s.plot : s.source)}</div></td>
       <td class="hide-sm">${esc(type === "episode" ? (seriesName[String(s.series_id)] || "?") : (catName[String(s.category_id)] || "Uncategorized"))}</td>
       <td class="num hide-sm mono">${s.id}</td>
-      <td class="act"><button class="icon" title="Edit" aria-label="Edit" data-edit="${s.id}">${icon("edit")}</button><button class="icon" title="Delete" aria-label="Delete" data-del="${s.id}">${icon("trash")}</button></td>
+      <td class="act"><button class="icon" title="${s.enabled === 0 ? "Turn on" : "Turn off"}" aria-label="${s.enabled === 0 ? "Turn on" : "Turn off"}" data-toggle="${s.id}">${icon("power")}</button><button class="icon" title="Edit" aria-label="Edit" data-edit="${s.id}">${icon("edit")}</button><button class="icon" title="Delete" aria-label="Delete" data-del="${s.id}">${icon("trash")}</button></td>
     </tr>`).join("")}</tbody></table></div>
     ${list.length > shown.length ? `<div class="more"><button class="ghost" id="more">Show ${Math.min(PAGE, list.length - shown.length)} more</button></div>` : ""}`
     : `<div class="empty">${rows.length ? "Nothing matches." : `No ${esc(TYPES[type].toLowerCase())} in this list yet.`}</div>`}
@@ -566,6 +577,12 @@ Views.streams.bind = () => {
   $("#import").onclick = () => importM3u();
   const rows = S.streams[S.list + ":" + S.ui.type] || [];
   const find = (id) => rows.find((s) => String(s.id) === id);
+  const st = $("#st"); if (st) st.onchange = (e) => { S.ui.st = e.target.value; S.ui.shown = PAGE; render(); };
+  const chk = $("#check"); if (chk) chk.onclick = () => checkDialog(visibleStreams());
+  document.querySelectorAll("[data-toggle]").forEach((b) => b.onclick = async () => {
+    const s = find(b.dataset.toggle); b.disabled = true;
+    try { await setEnabled([s.id], s.enabled === 0); toast(s.enabled === 0 ? "Turned on" : "Turned off: players no longer see it", "ok"); render(); } catch (e) { fail(e); b.disabled = false; }
+  });
   document.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => editStream(find(b.dataset.edit)));
   document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => {
     const s = find(b.dataset.del);
@@ -574,6 +591,97 @@ Views.streams.bind = () => {
     } }]);
   });
 };
+
+// ---- stream check (runs on the Worker: the browser only sends ids and gets small results back)
+const ST_FILTERS = { "": "Any state", down: "Down", up: "Working", na: "Cannot check", never: "Not checked", off: "Turned off" };
+function stMatch(s) {
+  switch (S.ui.st) {
+    case "down": return s.check_ok === 0;
+    case "up": return s.check_ok === 1;
+    case "na": return s.check_ok === -1;
+    case "never": return s.check_ok === null || s.check_ok === undefined;
+    case "off": return s.enabled === 0;
+    default: return true;
+  }
+}
+function checkDot(s) {
+  const when = s.checked ? " · " + new Date(s.checked * 1000).toLocaleString() : "";
+  if (s.check_ok === 1) return `<span class="dot up" title="Working (${esc(s.check_note)})${when}"></span>`;
+  if (s.check_ok === 0) return `<span class="dot down" title="Down (${esc(s.check_note)})${when}"></span>`;
+  if (s.check_ok === -1) return `<span class="dot na" title="Cannot be checked from Cloudflare (${esc(s.check_note)})"></span>`;
+  return `<span class="dot" title="Not checked yet"></span>`;
+}
+/** The streams the current filters show (what "Check" checks). */
+function visibleStreams() {
+  const type = S.ui.type; const q = S.ui.q.toLowerCase();
+  return (S.streams[S.list + ":" + type] || []).filter((s) => (!S.ui.cat || String(type === "episode" ? s.series_id : s.category_id) === S.ui.cat) && (!q || s.name.toLowerCase().includes(q) || String(s.id) === q) && stMatch(s));
+}
+async function setEnabled(ids, enabled) {
+  for (let i = 0; i < ids.length; i += 5000) await API.post("streams-state", { ids: ids.slice(i, i + 5000), enabled });
+  const on = enabled ? 1 : 0; const set = new Set(ids);
+  Object.values(S.streams).forEach((rows) => rows.forEach((s) => { if (set.has(s.id)) s.enabled = on; }));
+}
+const CHECK_BATCH = 25, CHECK_PARALLEL = 8;
+/** Runs the ids through POST /api/check, CHECK_PARALLEL requests at a time; onDone(results) after each request. */
+async function runChecks(ids, onDone, stop) {
+  const out = new Map(); let next = 0;
+  const worker = async () => {
+    while (next < ids.length && !stop.v) {
+      const part = ids.slice(next, next + CHECK_BATCH); next += CHECK_BATCH;
+      let res;
+      try { res = await API.post("check", { ids: part }); } catch (e) { try { res = await API.post("check", { ids: part }); } catch (e2) { res = []; } }
+      res.forEach((r) => out.set(r.id, r)); onDone(part.length);
+    }
+  };
+  await Promise.all(Array.from({ length: CHECK_PARALLEL }, worker));
+  return out;
+}
+function checkDialog(rows) {
+  rows = rows.filter((s) => s.type !== "series");
+  if (!rows.length) return;
+  const stop = { v: false };
+  Dlg.open(`Check ${rows.length} streams`, `
+    <p class="small muted">Cloudflare opens each source, reads only the reply headers (no video) and closes it. Down streams are checked a second time before they count as down. Your own connection only carries the results.</p>
+    <div style="margin-top:14px"><div class="row small muted"><span class="grow" id="c-msg">Checking…</span><span id="c-count">0 / ${rows.length}</span></div><div class="progress"><div id="c-bar"></div></div></div>
+    <div class="check-stats"><div><span class="dot up"></span>Working<b id="c-up">0</b></div><div><span class="dot down"></span>Down<b id="c-down">0</b></div><div><span class="dot na"></span>Cannot check<b id="c-na">0</b></div></div>
+    <div id="c-actions" style="margin-top:14px"></div>`,
+    [{ label: "Close", cls: "ghost" }]);
+  $("#dlg").addEventListener("close", () => { stop.v = true; render(); }, { once: true });
+  const byId = new Map(rows.map((s) => [s.id, s]));
+  const t0 = Date.now(); let done = 0;
+  const counts = () => {
+    const c = { up: 0, down: 0, na: 0 };
+    rows.forEach((s) => { if (s._res === 1) c.up++; else if (s._res === 0) c.down++; else if (s._res === -1) c.na++; });
+    $("#c-up").textContent = c.up; $("#c-down").textContent = c.down; $("#c-na").textContent = c.na;
+  };
+  const apply = (res) => res.forEach((r, id) => { const s = byId.get(id); if (s) { s._res = r.ok; s.check_ok = r.ok; s.check_note = r.note; s.checked = Math.floor(Date.now() / 1000); } });
+  rows.forEach((s) => { delete s._res; });
+  (async () => {
+    const first = await runChecks(rows.map((s) => s.id), (n) => {
+      done += n; if (stop.v) return;
+      $("#c-bar").style.width = (100 * done / rows.length) + "%"; $("#c-count").textContent = `${done} / ${rows.length}`;
+    }, stop);
+    apply(first); if (stop.v) return; counts();
+    const again = rows.filter((s) => s._res === 0).map((s) => s.id);
+    if (again.length) {
+      $("#c-msg").textContent = `Checking the ${again.length} down streams again…`;
+      apply(await runChecks(again, () => {}, stop)); if (stop.v) return; counts();
+    }
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+    $("#c-msg").textContent = `Done in ${secs} s`; $("#c-bar").style.width = "100%";
+    const downOn = rows.filter((s) => s._res === 0 && s.enabled !== 0).map((s) => s.id);
+    const upOff = rows.filter((s) => s._res === 1 && s.enabled === 0).map((s) => s.id);
+    const box = $("#c-actions");
+    box.innerHTML = (downOn.length ? `<button type="button" class="danger" id="c-off">${icon("power")}Turn off ${downOn.length} down</button> ` : "")
+      + (upOff.length ? `<button type="button" class="ghost" id="c-on">${icon("power")}Turn on ${upOff.length} working again</button>` : "")
+      + (!downOn.length && !upOff.length ? `<p class="small muted">Nothing to change.</p>` : `<p class="small muted" style="margin-top:8px">Turned-off streams disappear from players but stay here; filter by "Turned off" to find them.</p>`);
+    const act = (sel, ids, on) => { const b = $(sel); if (b) b.onclick = async () => {
+      b.disabled = true;
+      try { await setEnabled(ids, on); await Data.lists(); fillListSelect(); toast(`${ids.length} streams turned ${on ? "on" : "off"}`, "ok"); b.remove(); } catch (e) { fail(e); b.disabled = false; }
+    }; };
+    act("#c-off", downOn, false); act("#c-on", upOff, true);
+  })().catch(fail);
+}
 
 async function editStream(s) {
   const isNew = !s; const type = s ? s.type : S.ui.type;
@@ -597,12 +705,13 @@ async function editStream(s) {
     ${type === "episode" ? "" : `<div class="cols"><div class="field"><label class="f" for="s-cat">Category</label><select id="s-cat"><option value="0">Uncategorized</option>${cats.map((c) => `<option value="${c.id}" ${String(s ? s.category_id : S.ui.cat) === String(c.id) ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></div>
       <div class="field"><label class="f" for="s-num">Order (lower first)</label><input id="s-num" type="number" value="${v("num", "0")}"></div></div>`}
     ${extra}
+    <label class="row small"><input type="checkbox" id="s-on" ${!s || s.enabled !== 0 ? "checked" : ""}> On (off = players do not see it)</label>
     ${isNew ? "" : `<p class="small muted">ID ${s.id}</p>`}`,
     [{ label: "Cancel", cls: "ghost" }, { label: isNew ? "Add" : "Save", onClick: async () => {
       const val = (id) => { const el = $(id); return el ? el.value.trim() : undefined; };
       const d = { list_id: S.list, type, name: val("#s-name"), source: val("#s-src"), icon: val("#s-icon"), category_id: val("#s-cat"), num: val("#s-num"),
         epg_id: val("#s-epg"), year: val("#s-year"), rating: val("#s-rating"), genre: val("#s-genre"), tmdb_id: val("#s-tmdb"), plot: val("#s-plot"),
-        series_id: val("#s-series"), season: val("#s-season"), episode: val("#s-ep") };
+        series_id: val("#s-series"), season: val("#s-season"), episode: val("#s-ep"), enabled: $("#s-on").checked };
       if (isNew) await API.post("streams", d); else await API.put("streams/" + s.id, d);
       await Data.changed([type]); toast(isNew ? "Added" : "Saved", "ok"); render();
     } }]);

@@ -122,7 +122,7 @@ async function listRows(env, ctx, list, type) {
     const hit = await cache.match(key);
     if (hit) return hit.json();
   }
-  const r = await env.DB.prepare(`SELECT ${COLS} FROM streams WHERE list_id = ? AND type = ? ORDER BY num, id`).bind(list.id, type).all();
+  const r = await env.DB.prepare(`SELECT ${COLS} FROM streams WHERE list_id = ? AND type = ? AND enabled = 1 ORDER BY num, id`).bind(list.id, type).all();
   const rows = r.results.map((d, i) => fmt(type, d, i + 1));
   if (cache) ctx.waitUntil(cache.put(key, new Response(JSON.stringify(rows), { headers: { "Cache-Control": "max-age=86400", "Content-Type": "application/json" } })));
   return rows;
@@ -145,7 +145,7 @@ async function streams(env, ctx, list, type, categoryId) {
 async function one(env, listId, type, id) {
   const n = num(id, NaN);
   if (!Number.isInteger(n)) return null;
-  return env.DB.prepare("SELECT * FROM streams WHERE id = ? AND list_id = ? AND type = ?").bind(n, listId, type).first();
+  return env.DB.prepare("SELECT * FROM streams WHERE id = ? AND list_id = ? AND type = ? AND enabled = 1").bind(n, listId, type).first();
 }
 
 async function vodInfo(env, list, id) {
@@ -164,7 +164,7 @@ async function vodInfo(env, list, id) {
 async function seriesInfo(env, list, id) {
   const s = await one(env, list.id, "series", id);
   if (!s) return { seasons: [], info: {}, episodes: {} };
-  const r = await env.DB.prepare("SELECT * FROM streams WHERE list_id = ? AND type = 'episode' AND series_id = ? ORDER BY season, episode, id").bind(list.id, s.id).all();
+  const r = await env.DB.prepare("SELECT * FROM streams WHERE list_id = ? AND type = 'episode' AND series_id = ? AND enabled = 1 ORDER BY season, episode, id").bind(list.id, s.id).all();
   const episodes = {};
   for (const e of r.results) {
     const season = e.season || 1;

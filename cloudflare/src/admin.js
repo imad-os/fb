@@ -1,5 +1,6 @@
 // Admin API (/api/*) for docs/index.html. Sign-in: admins in D1, PBKDF2 passwords, bearer session tokens.
 import { json, str, num, now, sha256, randomToken, b64url, same, LIST_ID_RE, extOf } from "./util.js";
+import { checkStreams } from "./check.js";
 
 const ITER = 20000;            // PBKDF2 rounds (kept low enough for the 10 ms CPU of the free Workers plan)
 const SESSION_DAYS = 30;
@@ -137,6 +138,18 @@ async function route(request, env, url) {
   if (res === "categories") return cats(env, m, id, request, url);
   if (res === "streams") return streams(env, m, id, request, url);
   if (res === "import" && m === "POST") return importM3u(env, await body(request));
+  // Stream check (admin page "Check streams"): up to 25 ids per request.
+  if (res === "check" && m === "POST") return json(await checkStreams(env, (await body(request)).ids));
+  // Turn many streams on or off at once: { ids: [...], enabled: true|false }. Players stop/start seeing them at once.
+  if (res === "streams-state" && m === "POST") {
+    const b = await body(request);
+    const ids = JSON.stringify((Array.isArray(b.ids) ? b.ids : []).map(Number).filter(Number.isInteger).slice(0, 5000));
+    const r = await env.DB.batch([
+      env.DB.prepare("UPDATE streams SET enabled = ? WHERE id IN (SELECT value FROM json_each(?))").bind(b.enabled === false ? 0 : 1, ids),
+      env.DB.prepare("UPDATE lists SET rev = rev + 1, updated = unixepoch() WHERE id IN (SELECT DISTINCT list_id FROM streams WHERE id IN (SELECT value FROM json_each(?)))").bind(ids)
+    ]);
+    return json({ ok: true, changed: r[0].meta.changes });
+  }
   bad("Not found", 404);
 }
 
@@ -270,6 +283,7 @@ function streamData(b, type) {
   for (const k of ["icon", "epg_id", "plot", "year", "rating", "genre", "tmdb_id"]) d[k] = str(d[k]).slice(0, k === "plot" ? 4000 : 500);
   d.rating = d.rating || "0";
   d.ext = type === "live" ? "" : (extOf(d.source) || str(d.ext));
+  if (b.enabled !== undefined) d.enabled = b.enabled === false ? 0 : 1;
   if (type === "episode" && !d.series_id) bad("Choose the series");
   return d;
 }

@@ -81,6 +81,11 @@ in Cloudflare's cache (by list version), which saves D1 reads; on `*.workers.dev
   After creating a user, a dialog shows their links and a ready-made message to send.
 - **Streams**: Live TV, Movies, Series, Episodes; **Import M3U** (file or paste, categories from `group-title`,
   duplicates skipped, 500 per request).
+- **Check streams** (Streams page, "Check all" / "Check N" = what the filters show): the Worker opens each source,
+  reads only the reply headers (no video) and closes it; 25 streams per request, 8 requests at a time from the page,
+  down ones are checked twice. Then "Turn off N down" / "Turn on N working again". A turned-off stream is hidden from
+  players but stays in the admin (filter "Turned off"; the power button turns one on/off). rtmp/rtsp/udp and bare-IP
+  hosts cannot be checked from Cloudflare and are never turned off by the check.
 - **Links for users**: server address, M3U, EPG, and per user the full message.
 - **Settings**: public address, admins, change password.
 
