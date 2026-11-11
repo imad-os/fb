@@ -11,8 +11,10 @@ const LocationService = {
     getLocationByIp: async function(ipAddress="") {
         try {
             // ip-api.com/json/{ip}
-            const url = `${config.IP_API_URL}/${ipAddress}`;
-            const response = await axios.get(url);
+            // Only a plain IPv4 / IPv6 address goes into the URL (no paths or queries).
+            const ip = /^[0-9a-fA-F:.]{2,45}$/.test(String(ipAddress || '')) ? ipAddress : '';
+            const url = `${config.IP_API_URL}/${ip}`;
+            const response = await axios.get(url, { timeout: 5000 });
 
             if (response.data.status === 'fail') {
                 throw new Error(response.data.message || "Failed to locate IP");
@@ -30,4 +32,4 @@ const LocationService = {
     }
 };
 
-module.exports = LocationService;
+module.exports = LocationService;

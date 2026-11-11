@@ -15,12 +15,12 @@ module.exports = {
 
     // --- YOUTUBE API ---
     // TODO: Add your YouTube API Key here
-    YOUTUBE_API_KEY: "AIzaSyAGwuah6_wsPNojzaYDqTsG15tI7V_kQGM", 
+    YOUTUBE_API_KEY: process.env.YOUTUBE_API_KEY || "AIzaSyAGwuah6_wsPNojzaYDqTsG15tI7V_kQGM", 
     YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3/search",
 
     // --- TMDB API ---
     // TODO: Add your TMDB API Key here
-    TMDB_API_KEY: "4fea759274b31a120afda53601abae83", 
+    TMDB_API_KEY: process.env.TMDB_API_KEY || "4fea759274b31a120afda53601abae83", 
     TMDB_BASE_URL: "https://api.themoviedb.org/3",
     TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p/w500",
     TMDB_BACKDROP_BASE: "https://image.tmdb.org/t/p/original",
@@ -101,4 +101,4 @@ module.exports = {
         "US": "NA", "CA": "NA", "MX": "NA", "CR": "NA", "PA": "NA",
         "JM": "NA", "HN": "NA", "SV": "NA", "GT": "NA"
     },
-};
+};

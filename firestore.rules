@@ -1,0 +1,32 @@
+rules_version = '2';
+// Rules for the Xtream admin (public/admin.html). The Cloud Functions use the Admin SDK and are not limited by these.
+// An admin = a signed-in account with the custom claim admin: true, or a document xtream_admins/<uid>
+// (create it by hand in the Firebase console: Firestore > xtream_admins > Document ID = your Auth UID).
+// Paste into Firebase console > Firestore > Rules, or deploy with: firebase deploy --only firestore:rules
+// (add "firestore": { "rules": "firestore.rules" } to firebase.json first). Check other apps that use this
+// database before publishing: anything not listed below is closed.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && (request.auth.token.admin == true ||
+        exists(/databases/$(database)/documents/xtream_admins/$(request.auth.uid)));
+    }
+
+    match /xtream_admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /xtream_lists/{id}      { allow read, write: if isAdmin(); }
+    match /xtream_users/{id}      { allow read, write: if isAdmin(); }
+    match /xtream_categories/{id} { allow read, write: if isAdmin(); }
+    match /xtream_streams/{id}    { allow read, write: if isAdmin(); }
+    match /xtream_meta/{id}       { allow read, write: if isAdmin(); }
+
+    // Used by older TV apps (per account settings + one shared "global" doc).
+    match /usersSettings/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || uid == 'global');
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+  }
+}

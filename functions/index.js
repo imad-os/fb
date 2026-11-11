@@ -27,9 +27,17 @@ const applyMiddleware = (req, res) => {
     return false;
 };
 
-const settings =   {
+const settings = {
     region: "europe-west1",
-    cors: true
+    cors: true,
+    maxInstances: 10 // caps the bill if someone floods an endpoint
+};
+
+// The caller's own IP. Behind Hosting / Cloud Run the socket address is Google's, so read the forwarded headers.
+const clientIp = (req) => {
+    const h = req.headers || {};
+    const fwd = h["fastly-client-ip"] || h["x-appengine-user-ip"] || String(h["x-forwarded-for"] || "").split(",")[0].trim();
+    return fwd || req.ip || "";
 };
 
 
@@ -41,7 +49,7 @@ exports.getLocation = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
 
     try {
-        const ip = request.body.ip || request.query.ip || "";
+        const ip = (request.body && request.body.ip) || request.query.ip || clientIp(request);
         const locationData = await LocationService.getLocationByIp(ip);
         response.status(200).send(locationData);
 
@@ -74,10 +82,14 @@ exports.fetchSubtitles = onRequest(settings, async (request, response) => {
 exports.downloadSubtitle = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
     try {
-        const subtitleUrl = request.query.url || request.body.url;
+        const subtitleUrl = request.query.url || (request.body && request.body.url);
         
         if (!subtitleUrl) {
             response.status(400).send("Missing 'url' parameter");
+            return;
+        }
+        if (!SubtitleFetcher.isAllowedUrl(subtitleUrl)) {
+            response.status(400).send("Only subtitle files can be downloaded here");
             return;
         }
         const content = await SubtitleFetcher.downloadSubtitleContent(subtitleUrl);
@@ -133,9 +145,11 @@ exports.getRecommendations = onRequest(settings, async (request, response) => {
     try {
         let favorites = request.body.favorites || [];
         let watched = request.body.watched || [];
-        let count = parseInt(request.body.returnmax || request.query.returnmax || 20);
-        let type = request.body.type || 'movie'; 
+        let count = parseInt(request.body.returnmax || request.query.returnmax || 20, 10);
+        let type = request.body.type || request.query.type || 'movie';
+        if (type !== 'movie' && type !== 'tv') type = 'movie';
 
+        if (!Number.isFinite(count) || count < 1) count = 20;
         if (count > 100) count = 100;
 
         const recommendations = await RecommendationService.getRecommendations(favorites, watched, count, type);
@@ -200,7 +214,7 @@ exports.footballRecommendations = onRequest(settings, async (request, response) 
 
         if (!country || !continentCode) {
             try {
-                const location = await LocationService.getLocationByIp();
+                const location = await LocationService.getLocationByIp(clientIp(request));
                 country = location.country;
                 city = location.city;
                 continentCode = config.FOOTBALL_CONTINENT_MAP[location.countryCode] || "";
@@ -250,78 +264,12 @@ exports.footballNews = onRequest(settings, async (request, response) => {
 
 
 // ==========================================
-// 7. XTREAM CODES API (LOCAL FIRESTORE)
+// 7. XTREAM CODES API (FIRESTORE, SEVERAL LISTS)
 // ==========================================
+// /xtream/player_api.php ... = the "default" list, /xtream/l/<listId>/... = any list.
+// Routing, auth (status, expiry, list access) and the M3U output live in includes/xtreamApi.js.
 
 exports.xtreamRequest = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
-
-    // --- STREAM HANDLING LOGIC ---
-    // Detects URL pattern: /xtream/movie/username/password/streamID.mp4
-    const pathSegments = request.path.split('/').filter(p => p);
-    
-    // ADJUSTMENT: The hosting rewrite adds "xtream" to the start of pathSegments.
-    // We normalize this by removing "xtream" if it exists at index 0.
-    // Example: ['xtream', 'movie', 'user', 'pass', 'id.mp4'] -> ['movie', 'user', 'pass', 'id.mp4']
-    let segments = pathSegments;
-    if (segments.length > 0 && segments[0] === 'xtream') {
-        segments = segments.slice(1);
-    }
-
-    // Check for standard XC stream pattern (4 parts: type/user/pass/id.ext)
-    if (segments.length === 4) {
-        const [type, username, password, file] = segments;
-        
-        // Only handle specific types to avoid conflicting with other routes
-        if (['movie', 'live'].includes(type)) {
-            try {
-                // Extract ID from "23802.mp4" -> "23802"
-                const streamId = file.split('.')[0];
-                
-                const directSource = await XtreamService.getStreamDirectSource(username, password, streamId, type);
-                
-                if (directSource) {
-                    response.redirect(directSource);
-                } else {
-                    response.status(404).send("Stream source not found");
-                }
-                return; // Stop execution here for streams
-            } catch (err) {
-                logger.error("Stream Fetch Error", err);
-                response.status(500).send("Error fetching stream");
-                return;
-            }
-        }
-    }
-    // -----------------------------
-
-    try {
-        // Standard XC API uses GET with query params (username, password, action)
-        const params = request.method === 'GET' ? request.query : request.body;
-        
-        let action = params.action;
-
-        if (!action) {
-             // If no action is provided, but auth is present, standard behavior is often to return user info
-             if(params.username && params.password) {
-                 action = 'get_user_info';
-                 params.action = action;
-             } else {
-                response.status(400).send({ status: "error", message: "Missing 'action' parameter" });
-                return;
-             }
-        }
-
-        const data = await XtreamService.handleRequest(params);
-        response.status(200).send(data);
-
-    } catch (error) {
-        logger.error("Xtream API Error:", error);
-        // If auth fails, standard XC might return null or specific error, but we send 401/500
-        if (error.message === "Authentication failed") {
-             response.status(401).send({ status: "error", message: "Authentication Failed" });
-        } else {
-             response.status(500).send({ status: "error", message: error.message });
-        }
-    }
+    await XtreamService.handleHttp(request, response);
 });

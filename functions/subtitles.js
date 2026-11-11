@@ -12,6 +12,16 @@ const SubtitleFetcher = {
         return `https://${config.SUBTITLES_DOMAIN}/api/get-subtitles`;
     },
 
+    /** downloadSubtitle is not an open proxy: only paths on the subtitle service. */
+    isAllowedUrl(url) {
+        url = String(url || '');
+        if (url.startsWith('/') && !url.startsWith('//')) return true;
+        let host;
+        try { host = new URL(url).hostname.toLowerCase(); } catch (e) { return false; }
+        const target = Buffer.from(config.SUBTITLES_TARGET_ENCODED, 'base64').toString('utf-8').toLowerCase();
+        return [config.SUBTITLES_DOMAIN.toLowerCase(), target].some(d => host === d || host.endsWith('.' + d));
+    },
+
     // Node.js compatible URL fixer
     fixUrl(url) {
         const replacement = Buffer.from(config.SUBTITLES_TARGET_ENCODED, 'base64').toString('utf-8');
@@ -134,4 +144,4 @@ const SubtitleFetcher = {
     }
 };
 
-module.exports = SubtitleFetcher;
+module.exports = SubtitleFetcher;

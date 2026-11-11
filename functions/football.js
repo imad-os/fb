@@ -2,7 +2,6 @@
 
 const axios = require('axios'); 
 const config = require('./config');
-const { error } = require('firebase-functions/logger');
 
 const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 
@@ -28,7 +27,7 @@ const FootballService = {
             });
         } catch (error) {
             console.error(`Football API Error [${cleanEndpoint}]:`, error.message);
-            throw new Error(error.response?.data?.message || error || "Failed to fetch data from Football Provider");
+            throw new Error(error.response?.data?.message || error.message || "Failed to fetch data from Football Provider");
         }
 
         if(recursive<3 && response?.data?.errors && Object.keys(response?.data?.errors).length ){
@@ -58,7 +57,7 @@ const FootballService = {
 
         const response = await this.fetchData('/fixtures', { date: today });
         const allMatches = response.response || [];
-        if( Object.keys(response.errors).length ){
+        if (response.errors && Object.keys(response.errors).length) {
             return response.errors;
         }
         if (allMatches.length === 0) return [];
@@ -69,10 +68,10 @@ const FootballService = {
         const scoredMatches = allMatches.map(match => {
             let score = 0;
             const leagueId = match.league.id;
-            const leagueCountry = match.league.country.toLowerCase();
-            const homeTeam = match.teams.home.name.toLowerCase();
-            const awayTeam = match.teams.away.name.toLowerCase();
-            const venueCity = match.fixture.venue.city || "";
+            const leagueCountry = (match.league.country || "").toLowerCase();
+            const homeTeam = (match.teams.home.name || "").toLowerCase();
+            const awayTeam = (match.teams.away.name || "").toLowerCase();
+            const venueCity = ((match.fixture.venue && match.fixture.venue.city) || "").toLowerCase();
             const homeTeamId = match.teams.home.id;
             const awayTeamId = match.teams.away.id;
 
@@ -112,17 +111,17 @@ const FootballService = {
             else if (config.FRIENDLIES.includes(leagueId)) {
                 const isNationalTeam = (homeTeam === country || awayTeam === country);
                 const isLocalCity = (venueCity && city && venueCity.includes(city));
-                const isFavorite = (config.FAVORITE_TEAMS.includes(homeTeam) || config.FAVORITE_TEAMS.includes(awayTeam));
+                const isFavorite = (config.FAVORITE_TEAMS.includes(homeTeamId) || config.FAVORITE_TEAMS.includes(awayTeamId));
 
                 if (isNationalTeam || isLocalCity || isFavorite) {
                     score = 400;
                 }
             }
-            if ( 
-                (venueCity && city && venueCity.includes(city)) ||
-                homeTeam.includes(city)  || 
+            if (city && (
+                venueCity.includes(city) ||
+                homeTeam.includes(city) ||
                 awayTeam.includes(city)
-             ){
+            )) {
                 score = 700;
             }
             if( homeTeam === country || awayTeam === country ){
@@ -167,17 +166,17 @@ const FootballService = {
     news:async function(langue,country,page=1){
         const apiurl="https://api.elbotola.com/newsfeed/v3/?exclude_ids=&has_copyright=True&important_matches=True";
         try {
-            const fullUrl = `${apiurl}&lang=${langue||'en'}&page=${page||1}&country_code=${country||'MA'}`;
+            const fullUrl = `${apiurl}&lang=${encodeURIComponent(langue||'en')}&page=${parseInt(page,10)||1}&country_code=${encodeURIComponent(country||'MA')}`;
             const response = await axios.get(fullUrl, {
                 headers: {"user-agent" : ua},
             });
 
             return response.data;
         } catch (error) {
-            console.error(`Football API Error [${cleanEndpoint}]:`, error.message);
+            console.error(`Football news error:`, error.message);
             throw new Error(error.response?.data?.message || "Failed to fetch data from Football Provider");
         }
     },
 };
 
-module.exports = FootballService;
+module.exports = FootballService;
