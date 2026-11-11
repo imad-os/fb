@@ -12,7 +12,7 @@ migrations_dir = "migrations"
 [vars]
 # Who may call the admin API from a browser (the GitHub Pages address). Comma separated. "*" = anyone.
 ADMIN_ORIGINS = "https://imad-os.github.io,http://127.0.0.1:8000,http://localhost:8000"
-SUBTITLES_DOMAIN = "iptv-subtitle.geekspro.us"
+SUBTITLES_DOMAIN = "exoapp.tv"
 
 # Secrets (npx wrangler secret put NAME):
 #   SETUP_KEY          one-time key to create the first admin from the admin page
