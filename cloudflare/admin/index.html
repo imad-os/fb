@@ -308,9 +308,15 @@ const Data = {
 // ---------------------------------------------------------------- links
 const Links = {
   base() { return String(S.settings.base_url || API.base()).replace(/\/+$/, ""); },
-  server(listId) { return `${Links.base()}/xtream/l/${encodeURIComponent(listId)}`; },
+  // The default list is at the root (the standard Xtream address); other lists at /l/<list>.
+  // A user with only one list can use the root for it too (players that take just a host).
+  server(listId, u) {
+    const mine = u ? userLists(u).filter((id) => S.lists.some((l) => l.id === id && l.enabled)) : [];
+    if (listId === DEFAULT_LIST || (mine.length === 1 && mine[0] === listId)) return Links.base();
+    return `${Links.base()}/l/${encodeURIComponent(listId)}`;
+  },
   all(listId, u) {
-    const s = Links.server(listId);
+    const s = Links.server(listId, u);
     const q = u ? `username=${encodeURIComponent(u.username)}&password=${encodeURIComponent(u.password)}` : "username=USER&password=PASS";
     return { server: s, api: `${s}/player_api.php?${q}`, m3u: `${s}/get.php?${q}&type=m3u_plus&output=ts`, m3u8: `${s}/get.php?${q}&type=m3u_plus&output=m3u8`, epg: `${s}/xmltv.php?${q}` };
   },

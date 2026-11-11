@@ -1,5 +1,6 @@
 // Stream lists on Cloudflare Workers + D1.
-//   /xtream/...            Xtream Codes server (players)
+//   /player_api.php ...    Xtream Codes server at the root (standard addresses)
+//   /xtream/...            the same, older addresses
 //   /api/...               admin API (the admin page on GitHub Pages)
 //   /footballRequest ...   the helper APIs of the Firebase version, same paths
 import { json } from "./util.js";
@@ -37,7 +38,8 @@ export default {
       else if (first === "xtream") res = await handleXtream(request, env, ctx);
       else if (SERVICE_ROUTES.includes(first)) res = await handleService(first, request, env);
       else if (first === "") res = json({ name: "iptv-lists", ok: true });
-      else res = json({ error: "Not found" }, 404);
+      // Standard Xtream addresses at the root (/player_api.php, /get.php, /live/u/p/1.ts, /u/p/1, /l/<list>/...)
+      else res = await handleXtream(request, env, ctx);
     } catch (e) {
       console.error(e);
       res = json({ status: "error", message: "Server error" }, 500);

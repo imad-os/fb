@@ -1,6 +1,8 @@
 // Xtream Codes compatible server on D1, several lists.
 //   /xtream/player_api.php ...           the "default" list
 //   /xtream/l/<list>/player_api.php ...  any list
+//   /player_api.php ... (no prefix)      standard Xtream addresses: the user's own list
+//                                        (the default list if they have it, else their first one)
 //   .../get.php  .../xmltv.php  .../live|movie|series/<user>/<pass>/<id>.<ext>
 import { json, text, str, num, now, params, extOf, LIST_ID_RE } from "./util.js";
 
@@ -9,8 +11,9 @@ const DEFAULT_LIST = "default";
 export function parsePath(pathname) {
   let segs = pathname.split("/").filter(Boolean).map((s) => { try { return decodeURIComponent(s); } catch (e) { return s; } });
   let prefix = "";
-  if (segs[0] === "xtream") { segs = segs.slice(1); prefix = "/xtream"; }
-  let listId = DEFAULT_LIST;
+  // null = the root addresses: pick the user's list in authenticate()
+  let listId = null;
+  if (segs[0] === "xtream") { segs = segs.slice(1); prefix = "/xtream"; listId = DEFAULT_LIST; }
   if (segs[0] === "l" && segs.length >= 2) {
     listId = segs[1].toLowerCase();
     prefix += "/l/" + encodeURIComponent(listId);
@@ -26,6 +29,7 @@ export function parsePath(pathname) {
 export async function authenticate(env, listId, username, password) {
   username = str(username).trim(); password = str(password);
   if (!username || !password) return { ok: false, reason: "missing" };
+  if (listId === null) return authenticateAny(env, username, password);
   if (!LIST_ID_RE.test(listId)) return { ok: false, reason: "list" };
   const [l, u] = await env.DB.batch([
     env.DB.prepare("SELECT id, name, enabled, rev FROM lists WHERE id = ?").bind(listId),
@@ -38,6 +42,21 @@ export async function authenticate(env, listId, username, password) {
   if (user.status && user.status !== "Active") return { ok: false, reason: "disabled" };
   if (user.exp_date && user.exp_date < now()) return { ok: false, reason: "expired" };
   if (!user.allowed) return { ok: false, reason: "not-allowed" };
+  return { ok: true, user, list };
+}
+
+/** Root addresses: the user's list is the default one if they have it, else the first one that is on. */
+async function authenticateAny(env, username, password) {
+  const [u, l] = await env.DB.batch([
+    env.DB.prepare("SELECT * FROM users WHERE username = ?").bind(username),
+    env.DB.prepare("SELECT l.id, l.name, l.enabled, l.rev FROM user_lists x JOIN lists l ON l.id = x.list_id JOIN users u ON u.id = x.user_id WHERE u.username = ? AND l.enabled = 1 ORDER BY (l.id = ?) DESC, l.created, l.id LIMIT 1").bind(username, DEFAULT_LIST)
+  ]);
+  const user = u.results[0];
+  if (!user || user.password !== password) return { ok: false, reason: "wrong" };
+  if (user.status && user.status !== "Active") return { ok: false, reason: "disabled" };
+  if (user.exp_date && user.exp_date < now()) return { ok: false, reason: "expired" };
+  const list = l.results[0];
+  if (!list) return { ok: false, reason: "not-allowed" };
   return { ok: true, user, list };
 }
 
@@ -196,7 +215,7 @@ export async function handleXtream(request, env, ctx) {
     const auth = await authenticate(env, listId, username, password);
     if (!auth.ok) return text("Access denied: " + auth.reason, auth.reason === "list" ? 404 : 403);
     const dbType = type === "movie" ? "vod" : type === "series" ? "episode" : "live";
-    const row = await one(env, listId, dbType, file.split(".")[0]);
+    const row = await one(env, auth.list.id, dbType, file.split(".")[0]);
     if (!row || !row.source) return text("Stream source not found", 404);
     return new Response(null, { status: 302, headers: { Location: row.source, "Cache-Control": "no-store" } });
   }
@@ -220,7 +239,7 @@ export async function handleXtream(request, env, ctx) {
     const auth = await authenticate(env, listId, p.username, p.password);
     if (!auth.ok) return text("#EXTM3U\n# Access denied: " + auth.reason + "\n", auth.reason === "list" ? 404 : 401);
     const body = await m3u(env, ctx, auth.list, p, url.origin + prefix);
-    return new Response(body, { headers: { "Content-Type": "audio/x-mpegurl; charset=utf-8", "Content-Disposition": `inline; filename="${listId}.m3u"` } });
+    return new Response(body, { headers: { "Content-Type": "audio/x-mpegurl; charset=utf-8", "Content-Disposition": `inline; filename="${auth.list.id}.m3u"` } });
   }
 
   if (first && first !== "player_api.php" && first !== "panel_api.php") return json({ status: "error", message: "Unknown address" }, 404);

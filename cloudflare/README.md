@@ -16,11 +16,14 @@ The two versions do not share data. Users and streams you add here exist only he
 
 | Address | What it does |
 |---|---|
-| `/xtream/l/<list>/player_api.php?username=U&password=P[&action=...]` | Xtream Codes API for one list |
+| `/player_api.php?username=U&password=P[&action=...]` | **standard Xtream address** (server = the Worker's address): the user's own list (the `default` list if they have it, else their first list that is on) |
+| `/get.php`, `/xmltv.php`, `/live/U/P/<id>.<ext>`, `/movie/...`, `/series/...`, `/U/P/<id>` | the same at the root |
+| `/l/<list>/player_api.php?...` (and the rest under `/l/<list>/`) | one given list (server = `https://<worker>/l/<list>`) |
+| `/xtream/l/<list>/player_api.php?username=U&password=P[&action=...]` | older form, still works |
 | `/xtream/l/<list>/get.php?username=U&password=P&type=m3u_plus&output=ts` | M3U playlist (`output=m3u8` = HLS addresses) |
 | `/xtream/l/<list>/xmltv.php?username=U&password=P` | XMLTV channel list (ids, names, logos; no programmes) |
 | `/xtream/l/<list>/live/U/P/<id>.<ext>`, `/movie/...`, `/series/...` | play: checks the user, then **302** to the real source |
-| `/xtream/...` (no `/l/<list>`) | the `default` list |
+| `/xtream/...` (no `/l/<list>`) | older form: the `default` list |
 | `/api/...` | admin API, used by the admin page (bearer token, only from `ADMIN_ORIGINS`) |
 | `/footballRequest`, `/footballRecommendations`, `/footballNews`, `/getLocation`, `/fetchSubtitles`, `/downloadSubtitle`, `/searchTrailer`, `/getRecommendations` | same helper APIs and paths as the Firebase functions |
 
