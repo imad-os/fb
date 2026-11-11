@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Stream Lists</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='4' width='20' height='13' rx='2' fill='%237c6cff'/%3E%3Cpath d='M10 8l5 2.5-5 2.5z' fill='white'/%3E%3C/svg%3E">
+<script src="config.js"></script>
+<style>
+:root {
+  --bg: #0d1117; --side: #11161e; --panel: #161c26; --panel-2: #1d2532; --hover: #222b3a; --line: #263041;
+  --text: #e8edf4; --text-2: #9aa7b8; --text-3: #6b7889; --accent: #7c6cff; --accent-2: #9a8cff;
+  --ok: #2fbf71; --warn: #f0a33a; --err: #f0525a; --radius: 10px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+svg.i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 1px solid transparent; border-radius: 8px; padding: 8px 14px; background: var(--accent); color: #fff; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+button:hover { filter: brightness(1.1); }
+button:disabled { opacity: .5; cursor: default; filter: none; }
+button.ghost { background: var(--panel-2); border-color: var(--line); color: var(--text); font-weight: 500; }
+button.ghost:hover { background: var(--hover); }
+button.danger { background: transparent; border-color: rgba(240,82,90,.4); color: var(--err); }
+button.danger:hover { background: rgba(240,82,90,.12); }
+button.icon { padding: 6px; background: transparent; color: var(--text-2); }
+button.icon:hover { background: var(--hover); color: var(--text); }
+button.small { padding: 5px 10px; font-size: 13px; }
+:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+input, select, textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(124,108,255,.18); }
+input[type=checkbox] { width: auto; accent-color: var(--accent); }
+label.f { display: block; font-size: 12px; font-weight: 600; color: var(--text-2); margin: 0 0 5px; }
+.field { margin-bottom: 14px; }
+.row { display: flex; gap: 12px; align-items: center; }
+.row > .grow, .grow { flex: 1; min-width: 0; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.muted { color: var(--text-2); }
+.small { font-size: 12.5px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; }
+[hidden] { display: none !important; }
+
+/* login */
+#login { min-height: 100%; display: grid; place-items: center; padding: 16px; }
+.login-card { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px; }
+.login-card h1 { margin: 14px 0 4px; font-size: 20px; }
+.logo { width: 44px; height: 44px; border-radius: 12px; background: var(--accent); display: grid; place-items: center; color: #fff; }
+.logo svg.i { width: 24px; height: 24px; }
+
+/* shell */
+.shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100%; }
+.tbl { overflow-x: auto; }
+.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--line); padding: 16px 12px; gap: 14px; }
+.brand { display: flex; gap: 10px; align-items: center; padding: 0 6px; }
+.brand .logo { width: 34px; height: 34px; border-radius: 9px; }
+.brand b { display: block; font-size: 14.5px; } .brand span { font-size: 12px; color: var(--text-3); }
+.list-pick label { padding: 0 6px; }
+.nav a { display: flex; align-items: center; gap: 11px; padding: 9px 12px; margin-bottom: 2px; border-radius: 8px; color: var(--text-2); position: relative; }
+.nav a:hover { background: var(--hover); color: var(--text); text-decoration: none; }
+.nav a.on { background: var(--panel-2); color: var(--text); font-weight: 600; }
+.nav a.on::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--accent); }
+.nav .count { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.side-foot { margin-top: auto; border-top: 1px solid var(--line); padding: 12px 6px 0; }
+.side-foot .who { display: block; font-size: 12.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 8px; }
+main { min-width: 0; padding: 26px 32px 60px; }
+.head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.head h1 { margin: 0; font-size: 22px; } .head p { margin: 3px 0 0; color: var(--text-2); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; margin-bottom: 16px; }
+.card h2 { margin: 0 0 12px; font-size: 15px; }
+.card.flush { padding: 0; overflow: hidden; }
+.banner { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-radius: var(--radius); background: rgba(240,163,58,.1); border: 1px solid rgba(240,163,58,.35); margin-bottom: 16px; flex-wrap: wrap; }
+.banner.err { background: rgba(240,82,90,.1); border-color: rgba(240,82,90,.35); }
+.toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.toolbar input, .toolbar select { width: auto; min-width: 160px; }
+.toolbar input[type=search] { flex: 1; min-width: 180px; }
+.tabs { display: flex; gap: 4px; background: var(--bg); padding: 3px; border-radius: 9px; border: 1px solid var(--line); }
+.tabs button { background: transparent; color: var(--text-2); font-weight: 500; padding: 6px 12px; }
+.tabs button.on { background: var(--panel-2); color: var(--text); }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); font-weight: 600; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; }
+td { padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: rgba(255,255,255,.015); }
+td.num, th.num { text-align: right; } td.act { text-align: right; white-space: nowrap; }
+td .name { font-weight: 600; } td .sub { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; }
+.thumb { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; background: var(--panel-2); display: block; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11.5px; font-weight: 600; background: var(--panel-2); color: var(--text-2); }
+.badge.ok { background: rgba(47,191,113,.14); color: var(--ok); }
+.badge.err { background: rgba(240,82,90,.14); color: var(--err); }
+.badge.warn { background: rgba(240,163,58,.14); color: var(--warn); }
+.badge.acc { background: rgba(124,108,255,.16); color: var(--accent-2); }
+.chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.empty { padding: 48px 16px; text-align: center; color: var(--text-3); }
+.more { padding: 12px; text-align: center; border-top: 1px solid var(--line); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.tile b { display: block; font-size: 24px; } .tile span { color: var(--text-2); font-size: 12.5px; }
+.lists { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.list-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.list-card.on { border-color: var(--accent); }
+.list-card h3 { margin: 0; font-size: 15px; display: flex; gap: 8px; align-items: center; }
+.list-card .stats { display: flex; gap: 14px; color: var(--text-2); font-size: 12.5px; flex-wrap: wrap; }
+.copy { display: flex; gap: 8px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 4px 4px 10px; margin-bottom: 10px; }
+.copy code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+.copy-label { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 0 0 5px; }
+pre.share { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; margin: 0 0 10px; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
+.checks label { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.checks label:has(input:checked) { border-color: var(--accent); background: rgba(124,108,255,.08); }
+.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.progress { height: 6px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+.progress div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+
+/* dialog */
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); padding: 0; width: min(620px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
+dialog::backdrop { background: rgba(0,0,0,.6); }
+dialog form { display: flex; flex-direction: column; max-height: calc(100vh - 34px); }
+.dlg-head { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.dlg-head h3 { margin: 0; font-size: 16px; flex: 1; }
+.dlg-body { padding: 18px 20px; overflow: auto; }
+.dlg-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 14px 20px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.dlg-foot .left { margin-right: auto; }
+
+/* toasts */
+#toasts { position: fixed; right: 16px; bottom: 16px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 14px; min-width: 240px; max-width: 380px; box-shadow: 0 8px 24px rgba(0,0,0,.35); animation: rise .2s ease-out; }
+.toast.ok { border-left-color: var(--ok); } .toast.err { border-left-color: var(--err); }
+@keyframes rise { from { transform: translateY(8px); opacity: 0; } }
+
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; height: auto; min-width: 0; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 12px; gap: 10px; }
+  .brand span { display: none; }
+  .list-pick { flex: 1; min-width: 0; } .list-pick label { display: none; }
+  .toolbar input, .toolbar select { min-width: 0; flex: 1 1 140px; }
+  .toolbar .tabs { overflow-x: auto; max-width: 100%; }
+  .nav { order: 5; width: 100%; display: flex; overflow-x: auto; gap: 2px; }
+  .nav a { white-space: nowrap; padding: 8px 10px; } .nav a.on::before { display: none; }
+  .side-foot { margin: 0; border: 0; padding: 0; } .side-foot .who { display: none; }
+  main { padding: 18px 16px 48px; }
+  .hide-sm { display: none; }
+  td, th { padding: 8px 10px; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-tv" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8 2 2 0 1 1-2.8 2.8 1.7 1.7 0 0 0-2.8 1.2V21a2 2 0 1 1-4 0 1.7 1.7 0 0 0-2.9-1.2 2 2 0 1 1-2.8-2.8A1.7 1.7 0 0 0 3 14H3a2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.2-2.9 2 2 0 1 1 2.8-2.8A1.7 1.7 0 0 0 10 3a2 2 0 1 1 4 0 1.7 1.7 0 0 0 2.9 1.2 2 2 0 1 1 2.8 2.8A1.7 1.7 0 0 0 21 10a2 2 0 1 1 0 4 1.7 1.7 0 0 0-1.6 1z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7L20 8"/><path d="M20 3v5h-5"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/></symbol>
+</svg>
+
+<div id="toasts" aria-live="polite"></div>
+
+<!-- LOGIN -->
+<section id="login" hidden>
+  <form class="login-card" id="login-form">
+    <div class="logo"><svg class="i"><use href="#i-tv"/></svg></div>
+    <h1 id="login-title">Stream Lists</h1>
+    <p class="muted" id="login-sub" style="margin:0 0 20px">Sign in with your admin account.</p>
+    <div class="field" id="f-api"><label class="f" for="api">Server (your Worker's address)</label><input id="api" type="url" class="mono" required placeholder="https://iptv-lists.you.workers.dev"></div>
+    <div class="field" id="f-key" hidden><label class="f" for="setup-key">Setup key (the SETUP_KEY secret)</label><input id="setup-key" type="password" autocomplete="off"></div>
+    <div class="field"><label class="f" for="email">Email</label><input id="email" type="email" autocomplete="username" required></div>
+    <div class="field"><label class="f" for="password">Password</label><input id="password" type="password" autocomplete="current-password" required minlength="8"></div>
+    <p id="login-err" class="small" style="color:var(--err);min-height:1.2em;margin:0 0 10px"></p>
+    <button type="submit" id="login-btn" style="width:100%;justify-content:center">Sign in</button>
+  </form>
+</section>
+
+<!-- APP -->
+<div id="app" class="shell" hidden>
+  <aside class="side">
+    <div class="brand"><div class="logo"><svg class="i"><use href="#i-tv"/></svg></div><div><b>Stream Lists</b><span>Xtream admin</span></div></div>
+    <div class="list-pick">
+      <label class="f" for="list-select">Current list</label>
+      <select id="list-select" aria-label="Current list"></select>
+    </div>
+    <nav class="nav" aria-label="Pages">
+      <a href="#lists" data-page="lists"><svg class="i"><use href="#i-list"/></svg>Lists<span class="count" id="n-lists"></span></a>
+      <a href="#users" data-page="users"><svg class="i"><use href="#i-users"/></svg>Users<span class="count" id="n-users"></span></a>
+      <a href="#streams" data-page="streams"><svg class="i"><use href="#i-play"/></svg>Streams<span class="count" id="n-streams"></span></a>
+      <a href="#categories" data-page="categories"><svg class="i"><use href="#i-folder"/></svg>Categories<span class="count" id="n-cats"></span></a>
+      <a href="#links" data-page="links"><svg class="i"><use href="#i-link"/></svg>Links for users</a>
+      <a href="#settings" data-page="settings"><svg class="i"><use href="#i-gear"/></svg>Settings</a>
+    </nav>
+    <div class="side-foot">
+      <span class="who" id="who"></span>
+      <button class="ghost small" id="btn-out"><svg class="i"><use href="#i-out"/></svg>Sign out</button>
+    </div>
+  </aside>
+  <main>
+    <div id="banners"></div>
+    <div id="view"></div>
+  </main>
+</div>
+
+<dialog id="dlg"><form method="dialog" id="dlg-form">
+  <div class="dlg-head"><h3 id="dlg-title"></h3><button type="button" class="icon" id="dlg-x" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+  <div class="dlg-body" id="dlg-body"></div>
+  <div class="dlg-foot" id="dlg-foot"></div>
+</form></dialog>
+
+<script>
+"use strict";
+// Talks to the Worker's /api (Cloudflare D1). No framework, no build step.
+const DEFAULT_LIST = "default";
+const TYPES = { live: "Live TV", vod: "Movies", series: "Series", episode: "Episodes" };
+const ONE = { live: "channel", vod: "movie", series: "series", episode: "episode" };
+const CAT_TYPES = { live: "Live TV", vod: "Movies", series: "Series" };
+const PAGE = 200;
+
+// ---------------------------------------------------------------- helpers
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const icon = (n) => `<svg class="i"><use href="#i-${n}"/></svg>`;
+const nowSec = () => Math.floor(Date.now() / 1000);
+const toast = (msg, kind = "") => {
+  const el = document.createElement("div");
+  el.className = "toast " + kind; el.textContent = msg; el.setAttribute("role", kind === "err" ? "alert" : "status");
+  $("#toasts").appendChild(el); setTimeout(() => el.remove(), kind === "err" ? 6000 : 3000);
+};
+const fail = (e) => { console.error(e); toast(e.message || String(e), "err"); };
+const slug = (s) => String(s || "").toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+const LIST_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+const fmtDate = (sec) => sec ? new Date(sec * 1000).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
+const randPass = () => { const a = "abcdefghjkmnpqrstuvwxyz23456789"; let s = ""; for (const n of crypto.getRandomValues(new Uint32Array(10))) s += a[n % a.length]; return s; };
+const store = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } },
+  set(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+};
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); }
+  catch (e) { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
+  toast("Copied", "ok");
+}
+
+// ---------------------------------------------------------------- API
+const API = {
+  base() { return String(store.get("xa_api", window.IPTV_API || "")).replace(/\/+$/, ""); },
+  token() { return store.get("xa_token", ""); },
+  async call(method, path, data) {
+    let r;
+    try {
+      r = await fetch(API.base() + "/api/" + path, {
+        method, headers: { "Content-Type": "application/json", ...(API.token() ? { Authorization: "Bearer " + API.token() } : {}) },
+        body: data === undefined ? undefined : JSON.stringify(data)
+      });
+    } catch (e) { throw new Error("Cannot reach the server " + API.base()); }
+    let body = null; try { body = await r.json(); } catch (e) {}
+    if (r.status === 401 && path !== "login") { store.set("xa_token", null); showLogin(); }
+    if (!r.ok) throw new Error((body && body.error) || ("Error " + r.status));
+    return body;
+  },
+  get: (p) => API.call("GET", p), post: (p, d) => API.call("POST", p, d || {}), put: (p, d) => API.call("PUT", p, d || {}), del: (p) => API.call("DELETE", p)
+};
+
+// ---------------------------------------------------------------- state
+const S = {
+  email: "", lists: [], list: store.get("xa_list", DEFAULT_LIST), users: null, cats: {}, streams: {}, settings: {},
+  ui: { type: store.get("xa_type", "live"), cat: "", q: "", shown: PAGE, allUsers: store.get("xa_all", "0") === "1", catType: "live", linkUser: "" }
+};
+const curList = () => S.lists.find((l) => l.id === S.list) || { id: S.list, name: S.list };
+const userLists = (u) => u.lists || [];
+
+const Data = {
+  async lists() {
+    S.lists = await API.get("lists");
+    if (!S.lists.some((l) => l.id === S.list)) S.list = (S.lists[0] || { id: DEFAULT_LIST }).id;
+  },
+  async users(force) { if (!S.users || force) S.users = await API.get("users"); return S.users; },
+  async cats(listId = S.list, force) {
+    if (!S.cats[listId] || force) S.cats[listId] = await API.get("categories?list=" + encodeURIComponent(listId));
+    return S.cats[listId];
+  },
+  async streams(type, listId = S.list, force) {
+    const k = listId + ":" + type;
+    if (!S.streams[k] || force) S.streams[k] = await API.get(`streams?list=${encodeURIComponent(listId)}&type=${type}`);
+    return S.streams[k];
+  },
+  async settings() { S.settings = await API.get("settings"); },
+  /** After a change in the current list: drop what changed and refresh the counts. */
+  async changed(types) {
+    (types || Object.keys(TYPES)).forEach((t) => delete S.streams[S.list + ":" + t]);
+    delete S.cats[S.list];
+    await Data.lists(); fillListSelect();
+  }
+};
+
+// ---------------------------------------------------------------- links
+const Links = {
+  base() { return String(S.settings.base_url || API.base()).replace(/\/+$/, ""); },
+  server(listId) { return `${Links.base()}/xtream/l/${encodeURIComponent(listId)}`; },
+  all(listId, u) {
+    const s = Links.server(listId);
+    const q = u ? `username=${encodeURIComponent(u.username)}&password=${encodeURIComponent(u.password)}` : "username=USER&password=PASS";
+    return { server: s, api: `${s}/player_api.php?${q}`, m3u: `${s}/get.php?${q}&type=m3u_plus&output=ts`, m3u8: `${s}/get.php?${q}&type=m3u_plus&output=m3u8`, epg: `${s}/xmltv.php?${q}` };
+  },
+  share(listId, u) {
+    const l = Links.all(listId, u); const list = S.lists.find((x) => x.id === listId) || { name: listId };
+    const exp = u.exp_date ? fmtDate(u.exp_date) : "no end date";
+    return `${list.name} – your TV access\n\nXtream Codes login (IPTV Smarters, TiviMate, Speedy...)\nServer: ${l.server}\nUsername: ${u.username}\nPassword: ${u.password}\n\nM3U playlist: ${l.m3u}\nEPG: ${l.epg}\n\nValid until: ${exp}`;
+  },
+  row(label, value) {
+    return `<div class="copy-row"><p class="copy-label">${esc(label)}</p><div class="copy"><code title="${esc(value)}">${esc(value)}</code><button type="button" class="ghost small" data-copy="${esc(value)}">${icon("copy")}Copy</button></div></div>`;
+  }
+};
+
+// ---------------------------------------------------------------- dialog
+const Dlg = {
+  gen: 0,
+  open(title, body, buttons) {
+    const gen = ++Dlg.gen;
+    $("#dlg-title").textContent = title;
+    $("#dlg-body").innerHTML = body;
+    const foot = $("#dlg-foot"); foot.innerHTML = "";
+    (buttons || [{ label: "Close", cls: "ghost" }]).forEach((b) => {
+      const el = document.createElement("button");
+      el.type = "button"; el.className = b.cls || ""; el.innerHTML = b.label;
+      if (!b.onClick) el.onclick = () => $("#dlg").close();
+      else {
+        el.dataset.primary = "1";
+        el.onclick = async () => {
+          if (!$("#dlg-form").reportValidity()) return;
+          el.disabled = true;
+          try { const keep = await b.onClick(); if (keep !== true && gen === Dlg.gen) $("#dlg").close(); } catch (e) { fail(e); } finally { el.disabled = false; }
+        };
+      }
+      foot.appendChild(el);
+    });
+    if (!$("#dlg").open) $("#dlg").showModal();
+    const first = $("#dlg-body input, #dlg-body select, #dlg-body textarea"); if (first) first.focus();
+  }
+};
+$("#dlg-x").onclick = () => $("#dlg").close();
+$("#dlg-form").addEventListener("submit", (e) => e.preventDefault());
+$("#dlg").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.target.tagName === "TEXTAREA" || e.target.tagName === "BUTTON") return;
+  const p = [...document.querySelectorAll("#dlg-foot [data-primary]")].pop();
+  if (p) { e.preventDefault(); p.click(); }
+});
+document.addEventListener("click", (e) => { const c = e.target.closest("[data-copy]"); if (c) copyText(c.dataset.copy); });
+
+// ---------------------------------------------------------------- views
+const Views = {};
+
+Views.lists = async () => {
+  await Promise.all([Data.lists(), Data.users()]);
+  return `
+  <div class="head"><div class="grow"><h1>Lists</h1><p>Each list has its own streams, categories and link. A user only gets the lists you tick for them.</p></div>
+    <button id="add-list">${icon("plus")}New list</button></div>
+  <div class="lists">${S.lists.map((l) => `<div class="list-card ${l.id === S.list ? "on" : ""}">
+      <h3>${esc(l.name)} ${l.enabled ? '<span class="badge ok">On</span>' : '<span class="badge err">Off</span>'} ${l.id === S.list ? '<span class="badge acc">Current</span>' : ""}</h3>
+      <div class="mono muted">${esc(l.id)}</div>
+      ${l.note ? `<div class="small muted">${esc(l.note)}</div>` : ""}
+      <div class="stats"><span>${l.live} live</span><span>${l.vod} movies</span><span>${l.series} series</span><span>${l.users} users</span></div>
+      <div class="row" style="flex-wrap:wrap">
+        ${l.id === S.list ? "" : `<button class="ghost small" data-use="${esc(l.id)}">Open</button>`}
+        <button class="ghost small" data-links="${esc(l.id)}">${icon("link")}Links</button>
+        <button class="ghost small" data-edit-list="${esc(l.id)}">${icon("edit")}Edit</button>
+        ${l.id === DEFAULT_LIST ? "" : `<button class="danger small" data-del-list="${esc(l.id)}">${icon("trash")}Delete</button>`}
+      </div></div>`).join("")}</div>`;
+};
+Views.lists.bind = () => {
+  $("#add-list").onclick = () => editList();
+  document.querySelectorAll("[data-use]").forEach((b) => b.onclick = () => { setList(b.dataset.use); go("streams"); });
+  document.querySelectorAll("[data-links]").forEach((b) => b.onclick = () => { setList(b.dataset.links); go("links"); });
+  document.querySelectorAll("[data-edit-list]").forEach((b) => b.onclick = () => editList(S.lists.find((l) => l.id === b.dataset.editList)));
+  document.querySelectorAll("[data-del-list]").forEach((b) => b.onclick = () => deleteList(S.lists.find((l) => l.id === b.dataset.delList)));
+};
+
+function editList(l) {
+  const isNew = !l;
+  Dlg.open(isNew ? "New list" : "Edit list", `
+    <div class="field"><label class="f" for="l-name">Name</label><input id="l-name" required maxlength="60" value="${esc(l ? l.name : "")}" placeholder="Sports"></div>
+    <div class="field"><label class="f" for="l-id">Link name (in the users' address, cannot change later)</label>
+      <input id="l-id" class="mono" required pattern="[a-z0-9][a-z0-9_\\-]{0,39}" value="${esc(l ? l.id : "")}" ${isNew ? "" : "disabled"} placeholder="sports"></div>
+    <div class="field"><label class="f" for="l-note">Note (only for you)</label><input id="l-note" maxlength="200" value="${esc(l ? l.note || "" : "")}"></div>
+    <label class="row small"><input type="checkbox" id="l-on" ${!l || l.enabled ? "checked" : ""}> Users can watch this list (off = every link of this list stops working)</label>`,
+    [{ label: "Cancel", cls: "ghost" }, { label: isNew ? "Create list" : "Save", onClick: async () => {
+      const d = { name: $("#l-name").value.trim(), note: $("#l-note").value.trim(), enabled: $("#l-on").checked };
+      if (isNew) { d.id = $("#l-id").value.trim(); await API.post("lists", d); } else await API.put("lists/" + encodeURIComponent(l.id), d);
+      await Data.lists(); if (isNew) setList(d.id); else fillListSelect();
+      toast(isNew ? "List created" : "List saved", "ok"); render();
+    } }]);
+  if (isNew) $("#l-name").addEventListener("input", () => { $("#l-id").value = slug($("#l-name").value); });
+}
+
+function deleteList(l) {
+  const n = l.live + l.vod + l.series + l.episode;
+  Dlg.open("Delete list", `<p>This deletes the list <b>${esc(l.name)}</b>, its ${n} streams and ${l.cats} categories. Users keep their accounts but lose this list. This cannot be undone.</p>
+    <div class="field"><label class="f" for="d-id">Type <span class="mono">${esc(l.id)}</span> to confirm</label><input id="d-id" class="mono" autocomplete="off"></div>`,
+    [{ label: "Cancel", cls: "ghost" }, { label: `${icon("trash")}Delete everything`, cls: "danger", onClick: async () => {
+      if ($("#d-id").value.trim() !== l.id) { toast("The name does not match", "err"); return true; }
+      await API.del("lists/" + encodeURIComponent(l.id));
+      S.users = null; await Data.lists(); setList(S.lists[0].id); toast("List deleted", "ok"); render();
+    } }]);
+}
+
+// ---- users
+function userState(u) {
+  if (u.status && u.status !== "Active") return ['<span class="badge err">Disabled</span>', false];
+  if (u.exp_date && u.exp_date < nowSec()) return ['<span class="badge warn">Expired</span>', false];
+  return ['<span class="badge ok">Active</span>', true];
+}
+Views.users = async () => {
+  const users = await Data.users();
+  const q = S.ui.q.toLowerCase();
+  const rows = users.filter((u) => (S.ui.allUsers || userLists(u).includes(S.list)) && (!q || u.username.toLowerCase().includes(q)));
+  const listName = (id) => (S.lists.find((l) => l.id === id) || { name: id }).name;
+  return `
+  <div class="head"><div class="grow"><h1>Users</h1><p>Accounts are shared by all lists; tick the lists each user may watch.</p></div>
+    <button id="add-user">${icon("plus")}New user</button></div>
+  <div class="card flush">
+    <div class="toolbar">
+      <input type="search" id="q" placeholder="Search users" value="${esc(S.ui.q)}">
+      <div class="tabs"><button type="button" data-all="0" class="${S.ui.allUsers ? "" : "on"}">In ${esc(curList().name)}</button><button type="button" data-all="1" class="${S.ui.allUsers ? "on" : ""}">All users</button></div>
+    </div>
+    ${rows.length ? `<div class="tbl"><table><thead><tr><th>User</th><th>Status</th><th class="hide-sm">Expires</th><th class="hide-sm">Lists</th><th class="num hide-sm">Max conn.</th><th></th></tr></thead><tbody>
+    ${rows.map((u) => `<tr>
+      <td><div class="name">${esc(u.username)}</div><div class="sub mono">${esc(u.password)}</div></td>
+      <td>${userState(u)[0]}</td>
+      <td class="hide-sm">${u.exp_date ? esc(fmtDate(u.exp_date)) : '<span class="muted">No end</span>'}</td>
+      <td class="hide-sm"><div class="chips">${userLists(u).map((l) => `<span class="badge ${l === S.list ? "acc" : ""}">${esc(listName(l))}</span>`).join("") || '<span class="muted small">None</span>'}</div></td>
+      <td class="num hide-sm">${esc(u.max_connections)}</td>
+      <td class="act"><button class="ghost small" data-share="${u.id}">${icon("link")}Links</button><button class="icon" title="Edit" aria-label="Edit" data-edit="${u.id}">${icon("edit")}</button><button class="icon" title="Delete" aria-label="Delete" data-del="${u.id}">${icon("trash")}</button></td>
+    </tr>`).join("")}</tbody></table></div>` : `<div class="empty">${users.length ? "No user matches." : "No users yet. Create the first one."}</div>`}
+  </div>`;
+};
+Views.users.bind = () => {
+  $("#add-user").onclick = () => editUser();
+  bindSearch();
+  document.querySelectorAll("[data-all]").forEach((b) => b.onclick = () => { S.ui.allUsers = b.dataset.all === "1"; store.set("xa_all", b.dataset.all); render(); });
+  const find = (id) => S.users.find((u) => String(u.id) === id);
+  document.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => editUser(find(b.dataset.edit)));
+  document.querySelectorAll("[data-share]").forEach((b) => b.onclick = () => shareUser(find(b.dataset.share)));
+  document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => {
+    const u = find(b.dataset.del);
+    Dlg.open("Delete user", `<p>Delete <b>${esc(u.username)}</b>? Their links stop working at once.</p>`, [{ label: "Cancel", cls: "ghost" }, { label: "Delete", cls: "danger", onClick: async () => {
+      await API.del("users/" + u.id); await Data.users(true); await Data.lists(); toast("User deleted", "ok"); render();
+    } }]);
+  });
+};
+
+function editUser(u) {
+  const isNew = !u;
+  const exp = u && u.exp_date ? new Date(u.exp_date * 1000).toISOString().slice(0, 10) : "";
+  const lists = u ? userLists(u) : [S.list];
+  Dlg.open(isNew ? "New user" : "Edit user", `
+    <div class="cols">
+      <div class="field"><label class="f" for="u-name">Username</label><input id="u-name" required maxlength="64" pattern="[^/\\s]+" value="${esc(u ? u.username : "")}" autocomplete="off"></div>
+      <div class="field"><label class="f" for="u-pass">Password</label><div class="row"><input id="u-pass" class="mono" required maxlength="64" pattern="[^/\\s]+" value="${esc(u ? u.password : randPass())}" autocomplete="off"><button type="button" class="icon" id="u-gen" title="New password" aria-label="New password">${icon("key")}</button></div></div>
+    </div>
+    <div class="cols">
+      <div class="field"><label class="f" for="u-status">Status</label><select id="u-status"><option value="Active">Active</option><option value="Disabled" ${u && u.status === "Disabled" ? "selected" : ""}>Disabled</option></select></div>
+      <div class="field"><label class="f" for="u-max">Max connections</label><input id="u-max" type="number" min="1" max="20" value="${esc(u ? u.max_connections : 1)}"></div>
+    </div>
+    <div class="field"><label class="f" for="u-exp">Expires on (empty = no end)</label><input id="u-exp" type="date" value="${exp}">
+      <div class="quick"><button type="button" class="ghost small" data-add="1m">+1 month</button><button type="button" class="ghost small" data-add="3m">+3 months</button><button type="button" class="ghost small" data-add="6m">+6 months</button><button type="button" class="ghost small" data-add="1y">+1 year</button><button type="button" class="ghost small" data-add="0">No end</button></div></div>
+    <div class="field"><label class="f">Lists this user can watch</label><div class="checks">${S.lists.map((l) => `<label><input type="checkbox" name="u-list" value="${esc(l.id)}" ${lists.includes(l.id) ? "checked" : ""}>${esc(l.name)}</label>`).join("")}</div></div>
+    <div class="field"><label class="f" for="u-note">Note (only for you)</label><input id="u-note" maxlength="200" value="${esc(u ? u.note || "" : "")}"></div>`,
+    [{ label: "Cancel", cls: "ghost" }, { label: isNew ? "Create user" : "Save", onClick: async () => {
+      const d = $("#u-exp").value;
+      const data = {
+        username: $("#u-name").value.trim(), password: $("#u-pass").value.trim(), status: $("#u-status").value,
+        max_connections: parseInt($("#u-max").value, 10) || 1, exp_date: d ? Math.floor(new Date(d + "T23:59:59").getTime() / 1000) : null,
+        lists: [...document.querySelectorAll("input[name=u-list]:checked")].map((i) => i.value), note: $("#u-note").value.trim()
+      };
+      const saved = isNew ? await API.post("users", data) : await API.put("users/" + u.id, data);
+      await Data.users(true); await Data.lists(); toast(isNew ? "User created" : "User saved", "ok"); render();
+      if (isNew) shareUser(saved);
+    } }]);
+  $("#u-gen").onclick = () => { $("#u-pass").value = randPass(); };
+  document.querySelectorAll("[data-add]").forEach((b) => b.onclick = () => {
+    const inp = $("#u-exp"); const k = b.dataset.add;
+    if (k === "0") { inp.value = ""; return; }
+    const base = inp.value && new Date(inp.value) > new Date() ? new Date(inp.value) : new Date();
+    if (k.endsWith("m")) base.setMonth(base.getMonth() + parseInt(k, 10)); else base.setFullYear(base.getFullYear() + 1);
+    inp.value = base.toISOString().slice(0, 10);
+  });
+}
+
+function shareUser(u) {
+  const lists = userLists(u).filter((id) => S.lists.some((l) => l.id === id));
+  const [badge, ok] = userState(u);
+  Dlg.open(`Links for ${u.username}`, `
+    ${ok ? "" : `<div class="banner err" style="margin-bottom:14px">${badge}<span>These links do not work until the user is active again.</span></div>`}
+    ${lists.length ? lists.map((id) => {
+      const l = Links.all(id, u); const list = S.lists.find((x) => x.id === id);
+      return `<div class="card" style="background:var(--panel-2)"><h2>${esc(list.name)} ${list.enabled ? "" : '<span class="badge err">List off</span>'}</h2>
+        ${Links.row("Server (Xtream Codes)", l.server)}
+        <div class="cols">${Links.row("Username", u.username)}${Links.row("Password", u.password)}</div>
+        ${Links.row("M3U playlist", l.m3u)}${Links.row("M3U playlist (HLS)", l.m3u8)}${Links.row("EPG (XMLTV)", l.epg)}
+        <p class="copy-label">Message to send</p><pre class="share">${esc(Links.share(id, u))}</pre>
+        <button type="button" data-copy="${esc(Links.share(id, u))}">${icon("copy")}Copy message</button></div>`;
+    }).join("") : `<p class="muted">This user has no list yet. Edit the user and tick at least one list.</p>`}`);
+}
+
+// ---- streams
+Views.streams = async () => {
+  const type = S.ui.type;
+  const [rows, cats] = await Promise.all([Data.streams(type), Data.cats()]);
+  const series = type === "episode" ? await Data.streams("series") : [];
+  const catType = type === "episode" ? "series" : type;
+  const myCats = cats.filter((c) => c.type === catType);
+  const catName = Object.fromEntries(cats.map((c) => [String(c.id), c.name]));
+  const seriesName = Object.fromEntries(series.map((s) => [String(s.id), s.name]));
+  const q = S.ui.q.toLowerCase();
+  const list = rows.filter((s) => (!S.ui.cat || String(type === "episode" ? s.series_id : s.category_id) === S.ui.cat) && (!q || s.name.toLowerCase().includes(q) || String(s.id) === q));
+  const shown = list.slice(0, S.ui.shown);
+  return `
+  <div class="head"><div class="grow"><h1>Streams</h1><p>${esc(curList().name)}: channels, movies, series and their episodes.</p></div>
+    <button class="ghost" id="import">${icon("upload")}Import M3U</button>
+    <button id="add-stream">${icon("plus")}Add ${ONE[type]}</button></div>
+  <div class="card flush">
+    <div class="toolbar">
+      <div class="tabs">${Object.entries(TYPES).map(([k, v]) => `<button type="button" data-type="${k}" class="${k === type ? "on" : ""}">${v}</button>`).join("")}</div>
+      <select id="cat" aria-label="Category">${type === "episode"
+        ? `<option value="">All series</option>${series.map((s) => `<option value="${s.id}" ${S.ui.cat === String(s.id) ? "selected" : ""}>${esc(s.name)}</option>`).join("")}`
+        : `<option value="">All categories</option>${myCats.map((c) => `<option value="${c.id}" ${S.ui.cat === String(c.id) ? "selected" : ""}>${esc(c.name)}</option>`).join("")}`}</select>
+      <input type="search" id="q" placeholder="Search by name or ID" value="${esc(S.ui.q)}">
+      <span class="muted small">${list.length} of ${rows.length}</span>
+    </div>
+    ${shown.length ? `<div class="tbl"><table><thead><tr><th style="width:52px"></th><th>Name</th><th class="hide-sm">${type === "episode" ? "Series" : "Category"}</th><th class="num hide-sm">ID</th><th></th></tr></thead><tbody>
+    ${shown.map((s) => `<tr>
+      <td>${s.icon ? `<img class="thumb" loading="lazy" alt="" src="${esc(s.icon)}" onerror="this.style.visibility='hidden'">` : '<div class="thumb"></div>'}</td>
+      <td><div class="name">${esc(s.name)}${type === "episode" ? ` <span class="muted small">S${esc(s.season || 1)} E${esc(s.episode || 1)}</span>` : ""}</div><div class="sub mono">${esc(type === "series" ? s.plot : s.source)}</div></td>
+      <td class="hide-sm">${esc(type === "episode" ? (seriesName[String(s.series_id)] || "?") : (catName[String(s.category_id)] || "Uncategorized"))}</td>
+      <td class="num hide-sm mono">${s.id}</td>
+      <td class="act"><button class="icon" title="Edit" aria-label="Edit" data-edit="${s.id}">${icon("edit")}</button><button class="icon" title="Delete" aria-label="Delete" data-del="${s.id}">${icon("trash")}</button></td>
+    </tr>`).join("")}</tbody></table></div>
+    ${list.length > shown.length ? `<div class="more"><button class="ghost" id="more">Show ${Math.min(PAGE, list.length - shown.length)} more</button></div>` : ""}`
+    : `<div class="empty">${rows.length ? "Nothing matches." : `No ${esc(TYPES[type].toLowerCase())} in this list yet.`}</div>`}
+  </div>`;
+};
+Views.streams.bind = () => {
+  document.querySelectorAll("[data-type]").forEach((b) => b.onclick = () => { S.ui.type = b.dataset.type; store.set("xa_type", S.ui.type); S.ui.cat = ""; S.ui.shown = PAGE; render(); });
+  $("#cat").onchange = (e) => { S.ui.cat = e.target.value; S.ui.shown = PAGE; render(); };
+  bindSearch();
+  const more = $("#more"); if (more) more.onclick = () => { S.ui.shown += PAGE; render(); };
+  $("#add-stream").onclick = () => editStream();
+  $("#import").onclick = () => importM3u();
+  const rows = S.streams[S.list + ":" + S.ui.type] || [];
+  const find = (id) => rows.find((s) => String(s.id) === id);
+  document.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => editStream(find(b.dataset.edit)));
+  document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => {
+    const s = find(b.dataset.del);
+    Dlg.open("Delete stream", `<p>Delete <b>${esc(s.name)}</b> from ${esc(curList().name)}?${s.type === "series" ? " Its episodes are deleted too." : ""}</p>`, [{ label: "Cancel", cls: "ghost" }, { label: "Delete", cls: "danger", onClick: async () => {
+      await API.del("streams/" + s.id); await Data.changed([s.type, "episode"]); toast("Deleted", "ok"); render();
+    } }]);
+  });
+};
+
+async function editStream(s) {
+  const isNew = !s; const type = s ? s.type : S.ui.type;
+  const cats = (await Data.cats()).filter((c) => c.type === (type === "episode" ? "series" : type));
+  const series = type === "episode" ? await Data.streams("series") : [];
+  const v = (k, d = "") => esc(s && s[k] !== undefined && s[k] !== null && s[k] !== "" ? s[k] : d);
+  const meta = (genre) => `<div class="cols"><div class="field"><label class="f" for="s-year">Year</label><input id="s-year" value="${v("year")}"></div><div class="field"><label class="f" for="s-rating">Rating (0-10)</label><input id="s-rating" type="number" step="0.1" min="0" max="10" value="${v("rating", "0")}"></div>
+    ${genre ? `<div class="field"><label class="f" for="s-genre">Genre</label><input id="s-genre" value="${v("genre")}"></div>` : `<div class="field"><label class="f" for="s-tmdb">TMDB ID</label><input id="s-tmdb" value="${v("tmdb_id")}"></div>`}</div>
+    <div class="field"><label class="f" for="s-plot">Plot</label><textarea id="s-plot" rows="3">${v("plot")}</textarea></div>`;
+  const extra = {
+    live: `<div class="field"><label class="f" for="s-epg">EPG channel ID (tvg-id)</label><input id="s-epg" class="mono" value="${v("epg_id")}"></div>`,
+    vod: meta(false), series: meta(true),
+    episode: `<div class="field"><label class="f" for="s-series">Series</label><select id="s-series" required><option value="">Choose a series</option>${series.map((x) => `<option value="${x.id}" ${String(s ? s.series_id : S.ui.cat) === String(x.id) ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
+      <div class="cols"><div class="field"><label class="f" for="s-season">Season</label><input id="s-season" type="number" min="0" required value="${v("season", "1")}"></div><div class="field"><label class="f" for="s-ep">Episode</label><input id="s-ep" type="number" min="0" required value="${v("episode", "1")}"></div></div>
+      <div class="field"><label class="f" for="s-plot">Plot</label><textarea id="s-plot" rows="2">${v("plot")}</textarea></div>`
+  }[type];
+  Dlg.open(`${isNew ? "Add" : "Edit"} ${ONE[type]}`, `
+    <div class="field"><label class="f" for="s-name">Name</label><input id="s-name" required maxlength="200" value="${v("name")}"></div>
+    ${type === "series" ? "" : `<div class="field"><label class="f" for="s-src">Source address (the real stream; users never see it)</label><input id="s-src" class="mono" type="url" required value="${v("source")}" placeholder="https://..."></div>`}
+    <div class="field"><label class="f" for="s-icon">${type === "live" ? "Logo" : "Poster"} address</label><input id="s-icon" class="mono" type="url" value="${v("icon")}" placeholder="https://..."></div>
+    ${type === "episode" ? "" : `<div class="cols"><div class="field"><label class="f" for="s-cat">Category</label><select id="s-cat"><option value="0">Uncategorized</option>${cats.map((c) => `<option value="${c.id}" ${String(s ? s.category_id : S.ui.cat) === String(c.id) ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></div>
+      <div class="field"><label class="f" for="s-num">Order (lower first)</label><input id="s-num" type="number" value="${v("num", "0")}"></div></div>`}
+    ${extra}
+    ${isNew ? "" : `<p class="small muted">ID ${s.id}</p>`}`,
+    [{ label: "Cancel", cls: "ghost" }, { label: isNew ? "Add" : "Save", onClick: async () => {
+      const val = (id) => { const el = $(id); return el ? el.value.trim() : undefined; };
+      const d = { list_id: S.list, type, name: val("#s-name"), source: val("#s-src"), icon: val("#s-icon"), category_id: val("#s-cat"), num: val("#s-num"),
+        epg_id: val("#s-epg"), year: val("#s-year"), rating: val("#s-rating"), genre: val("#s-genre"), tmdb_id: val("#s-tmdb"), plot: val("#s-plot"),
+        series_id: val("#s-series"), season: val("#s-season"), episode: val("#s-ep") };
+      if (isNew) await API.post("streams", d); else await API.put("streams/" + s.id, d);
+      await Data.changed([type]); toast(isNew ? "Added" : "Saved", "ok"); render();
+    } }]);
+}
+
+// ---- M3U import
+function parseM3u(text) {
+  const out = []; let cur = null;
+  for (let line of text.split(/\r?\n/)) {
+    line = line.trim(); if (!line) continue;
+    if (line.startsWith("#EXTINF")) {
+      const attr = (k) => { const m = line.match(new RegExp(k + '="([^"]*)"', "i")); return m ? m[1].trim() : ""; };
+      const lastQ = line.lastIndexOf('"'); const comma = line.indexOf(",", lastQ > 0 ? lastQ : 0);
+      cur = { name: (comma >= 0 ? line.slice(comma + 1) : "").trim() || attr("tvg-name") || "Unknown", logo: attr("tvg-logo"), group: attr("group-title"), epg: attr("tvg-id") };
+    } else if (line.startsWith("#EXTGRP:") && cur) cur.group = cur.group || line.slice(8).trim();
+    else if (!line.startsWith("#") && cur) { if (/^(https?|rtmp|rtsp|udp):\/\//i.test(line)) out.push({ ...cur, url: line }); cur = null; }
+  }
+  return out;
+}
+const guessType = (i) => { const p = i.url.split("?")[0].toLowerCase(); return /\/movie\//.test(p) || /\.(mp4|mkv|avi|mov)$/.test(p) ? "vod" : "live"; };
+function importM3u() {
+  Dlg.open(`Import M3U into ${curList().name}`, `
+    <div class="cols">
+      <div class="field"><label class="f" for="m-type">Import as</label><select id="m-type"><option value="auto">Guess (movies by file type)</option><option value="live">Live TV</option><option value="vod">Movies</option></select></div>
+      <div class="field"><label class="f" for="m-groups">Categories</label><select id="m-groups"><option value="group">From group-title (created when missing)</option><option value="none">Uncategorized</option></select></div>
+    </div>
+    <div class="field"><label class="f" for="m-file">M3U file</label><input id="m-file" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,text/plain"></div>
+    <div class="field"><label class="f" for="m-text">or paste the playlist</label><textarea id="m-text" rows="8" class="mono" placeholder="#EXTM3U&#10;#EXTINF:-1 tvg-logo=&quot;...&quot; group-title=&quot;News&quot;,Channel&#10;https://example.com/live.m3u8"></textarea></div>
+    <label class="row small"><input type="checkbox" id="m-skip" checked> Skip addresses that are already in this list</label>
+    <div id="m-prog" hidden style="margin-top:14px"><div class="row small muted"><span class="grow" id="m-msg">Importing…</span><span id="m-count"></span></div><div class="progress"><div id="m-bar"></div></div></div>`,
+    [{ label: "Cancel", cls: "ghost" }, { label: `${icon("upload")}Import`, onClick: async () => {
+      let text = $("#m-text").value; const f = $("#m-file").files[0];
+      if (f) text = await f.text();
+      const seen = new Set();
+      const mode = $("#m-type").value;
+      const items = parseM3u(text || "").filter((i) => !seen.has(i.url) && seen.add(i.url)).map((i) => ({ ...i, type: mode === "auto" ? guessType(i) : mode }));
+      if (!items.length) { toast("No streams found in this playlist", "err"); return true; }
+      $("#m-prog").hidden = false;
+      let added = 0, cats = 0;
+      for (let i = 0; i < items.length; i += 500) {
+        const r = await API.post("import", { list_id: S.list, items: items.slice(i, i + 500), groups: $("#m-groups").value === "group", skip: $("#m-skip").checked });
+        added += r.added; cats += r.cats;
+        const done = Math.min(items.length, i + 500);
+        $("#m-bar").style.width = (100 * done / items.length) + "%"; $("#m-count").textContent = `${done} / ${items.length}`;
+      }
+      await Data.changed(["live", "vod"]);
+      toast(`Imported ${added} streams${cats ? ` and ${cats} categories` : ""}`, "ok"); render();
+    } }]);
+}
+
+// ---- categories
+Views.categories = async () => {
+  const type = S.ui.catType;
+  const cats = (await Data.cats()).filter((c) => c.type === type);
+  return `
+  <div class="head"><div class="grow"><h1>Categories</h1><p>Groups shown in the players for ${esc(curList().name)}.</p></div><button id="add-cat">${icon("plus")}New category</button></div>
+  <div class="card flush">
+    <div class="toolbar"><div class="tabs">${Object.entries(CAT_TYPES).map(([k, v]) => `<button type="button" data-ct="${k}" class="${k === type ? "on" : ""}">${v}</button>`).join("")}</div></div>
+    ${cats.length ? `<div class="tbl"><table><thead><tr><th>Name</th><th class="num">Streams</th><th class="num hide-sm">ID</th><th></th></tr></thead><tbody>
+    ${cats.map((c) => `<tr><td class="name">${esc(c.name)}</td><td class="num">${c.streams}</td><td class="num mono hide-sm">${c.id}</td>
+      <td class="act"><button class="icon" title="Edit" aria-label="Edit" data-edit="${c.id}">${icon("edit")}</button><button class="icon" title="Delete" aria-label="Delete" data-del="${c.id}">${icon("trash")}</button></td></tr>`).join("")}
+    </tbody></table></div>` : `<div class="empty">No ${esc(CAT_TYPES[type].toLowerCase())} categories yet.</div>`}
+  </div>`;
+};
+Views.categories.bind = () => {
+  document.querySelectorAll("[data-ct]").forEach((b) => b.onclick = () => { S.ui.catType = b.dataset.ct; render(); });
+  const find = (id) => (S.cats[S.list] || []).find((c) => String(c.id) === id);
+  $("#add-cat").onclick = () => editCat();
+  document.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => editCat(find(b.dataset.edit)));
+  document.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => {
+    const c = find(b.dataset.del);
+    Dlg.open("Delete category", `<p>Delete <b>${esc(c.name)}</b>? Its streams stay, as Uncategorized.</p>`, [{ label: "Cancel", cls: "ghost" }, { label: "Delete", cls: "danger", onClick: async () => {
+      await API.del("categories/" + c.id); await Data.changed([c.type]); toast("Deleted", "ok"); render();
+    } }]);
+  });
+};
+function editCat(c) {
+  const isNew = !c;
+  Dlg.open(isNew ? "New category" : "Edit category", `
+    <div class="field"><label class="f" for="c-name">Name</label><input id="c-name" required maxlength="100" value="${esc(c ? c.name : "")}"></div>
+    <div class="cols"><div class="field"><label class="f" for="c-type">Type</label><select id="c-type" ${isNew ? "" : "disabled"}>${Object.entries(CAT_TYPES).map(([k, v]) => `<option value="${k}" ${(c ? c.type : S.ui.catType) === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+    <div class="field"><label class="f" for="c-order">Order (lower first)</label><input id="c-order" type="number" value="${esc(c ? c.ord : 0)}"></div></div>`,
+    [{ label: "Cancel", cls: "ghost" }, { label: isNew ? "Create" : "Save", onClick: async () => {
+      const d = { name: $("#c-name").value.trim(), ord: Number($("#c-order").value) || 0 };
+      if (isNew) await API.post("categories", { ...d, list_id: S.list, type: $("#c-type").value }); else await API.put("categories/" + c.id, d);
+      await Data.changed([]); toast("Saved", "ok"); render();
+    } }]);
+}
+
+// ---- links
+Views.links = async () => {
+  const users = (await Data.users()).filter((u) => userLists(u).includes(S.list));
+  const l = Links.all(S.list, null);
+  const pick = users.find((u) => String(u.id) === S.ui.linkUser) || null;
+  const lu = pick ? Links.all(S.list, pick) : null;
+  return `
+  <div class="head"><div class="grow"><h1>Links for users</h1><p>What to give the people who watch <b>${esc(curList().name)}</b>.</p></div></div>
+  ${curList().enabled === false ? `<div class="banner err"><span class="badge err">List off</span><span>This list is turned off: none of its links work. Turn it on in Lists.</span></div>` : ""}
+  <div class="card"><h2>This list</h2>
+    ${Links.row("Server address (Xtream Codes apps: IPTV Smarters, TiviMate, Speedy...)", l.server)}
+    <p class="small muted" style="margin-top:-2px">Each user signs in with their own username and password; only users who have this list ticked get in.</p>
+    ${Links.row("M3U playlist (replace USER and PASS)", l.m3u)}
+    ${Links.row("EPG", l.epg)}
+  </div>
+  <div class="card"><h2>For one user</h2>
+    ${users.length ? `<div class="field" style="max-width:360px"><label class="f" for="lu">User</label><select id="lu"><option value="">Choose a user</option>${users.map((u) => `<option value="${u.id}" ${pick && pick.id === u.id ? "selected" : ""}>${esc(u.username)}</option>`).join("")}</select></div>` : `<p class="muted">No user can watch this list yet. Create one in Users and tick ${esc(curList().name)}.</p>`}
+    ${pick ? `${userState(pick)[1] ? "" : `<div class="banner err">${userState(pick)[0]}<span>These links will not work until this user is active again.</span></div>`}
+      <div class="cols">${Links.row("Username", pick.username)}${Links.row("Password", pick.password)}</div>
+      ${Links.row("M3U playlist", lu.m3u)}${Links.row("M3U playlist (HLS)", lu.m3u8)}${Links.row("API test (opens the account info)", lu.api)}
+      <p class="copy-label">Message to send</p><pre class="share">${esc(Links.share(S.list, pick))}</pre>
+      <button type="button" data-copy="${esc(Links.share(S.list, pick))}">${icon("copy")}Copy message</button>` : ""}
+  </div>`;
+};
+Views.links.bind = () => { const s = $("#lu"); if (s) s.onchange = () => { S.ui.linkUser = s.value; render(); }; };
+
+// ---- settings
+Views.settings = async () => {
+  await Data.settings();
+  const admins = await API.get("admins");
+  return `
+  <div class="head"><div class="grow"><h1>Settings</h1></div></div>
+  <div class="card"><h2>Public address</h2>
+    <p class="muted small">The start of every link given to users. Empty = the Worker's own address (${esc(API.base())}). Put your own domain here once it points to the Worker.</p>
+    <div class="row"><input id="st-base" class="mono grow" type="url" placeholder="${esc(API.base())}" value="${esc(S.settings.base_url || "")}"><button id="st-save">Save</button></div>
+  </div>
+  <div class="card"><h2>Admins</h2>
+    <div class="tbl"><table><tbody>${admins.map((a) => `<tr><td>${esc(a.email)} ${a.email === S.email ? '<span class="badge acc">You</span>' : ""}</td><td class="act">${a.email === S.email ? "" : `<button class="icon" title="Remove" aria-label="Remove" data-del-admin="${a.id}">${icon("trash")}</button>`}</td></tr>`).join("")}</tbody></table></div>
+    <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="ghost" id="st-add-admin">${icon("plus")}Add an admin</button><button class="ghost" id="st-pass">${icon("key")}Change my password</button></div>
+  </div>
+  <div class="card"><h2>Server</h2>
+    <p class="small">Worker: <span class="mono">${esc(API.base())}</span></p>
+    <p class="muted small">Players see a change made here at once (lists are cached by version on the server).</p>
+    <button class="ghost" id="st-reload">${icon("refresh")}Reload everything</button>
+  </div>`;
+};
+Views.settings.bind = () => {
+  $("#st-save").onclick = async () => {
+    try { await API.put("settings", { base_url: $("#st-base").value.trim() }); await Data.settings(); toast("Saved", "ok"); } catch (e) { fail(e); }
+  };
+  $("#st-reload").onclick = async () => { S.users = null; S.cats = {}; S.streams = {}; await Data.lists(); fillListSelect(); render(); };
+  $("#st-add-admin").onclick = () => Dlg.open("Add an admin", `
+    <div class="field"><label class="f" for="a-email">Email</label><input id="a-email" type="email" required></div>
+    <div class="field"><label class="f" for="a-pass">Password (8+ characters)</label><input id="a-pass" class="mono" required minlength="8" value="${randPass()}"></div>`,
+    [{ label: "Cancel", cls: "ghost" }, { label: "Add", onClick: async () => { await API.post("admins", { email: $("#a-email").value, password: $("#a-pass").value }); toast("Admin added", "ok"); render(); } }]);
+  $("#st-pass").onclick = () => Dlg.open("Change my password", `
+    <div class="field"><label class="f" for="p-old">Current password</label><input id="p-old" type="password" required autocomplete="current-password"></div>
+    <div class="field"><label class="f" for="p-new">New password (8+ characters)</label><input id="p-new" type="password" required minlength="8" autocomplete="new-password"></div>`,
+    [{ label: "Cancel", cls: "ghost" }, { label: "Change", onClick: async () => { await API.post("password", { old: $("#p-old").value, new: $("#p-new").value }); toast("Password changed; other devices are signed out", "ok"); } }]);
+  document.querySelectorAll("[data-del-admin]").forEach((b) => b.onclick = async () => { try { await API.del("admins/" + b.dataset.delAdmin); toast("Removed", "ok"); render(); } catch (e) { fail(e); } });
+};
+
+// ---------------------------------------------------------------- shell
+let searchTimer = 0;
+function bindSearch() {
+  const q = $("#q"); if (!q) return;
+  q.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { S.ui.q = q.value; S.ui.shown = PAGE; const pos = q.selectionStart; render().then(() => { const n = $("#q"); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }); }, 180); };
+}
+function setList(id) { S.list = id; store.set("xa_list", id); S.ui.cat = ""; S.ui.shown = PAGE; S.ui.linkUser = ""; fillListSelect(); }
+function fillListSelect() {
+  $("#list-select").innerHTML = S.lists.map((l) => `<option value="${esc(l.id)}" ${l.id === S.list ? "selected" : ""}>${esc(l.name)}${l.enabled ? "" : " (off)"}</option>`).join("");
+  $("#n-lists").textContent = S.lists.length;
+  const l = curList();
+  $("#n-streams").textContent = l.live !== undefined ? l.live + l.vod + l.series : "";
+  $("#n-cats").textContent = l.cats ?? "";
+  $("#n-users").textContent = l.users ?? "";
+}
+function go(p) { if (location.hash !== "#" + p) location.hash = p; else render(); }
+let renderId = 0;
+async function render() {
+  const id = ++renderId;
+  let page = (location.hash.slice(1) || "streams").split("/")[0];
+  if (!Views[page]) page = "streams";
+  document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("on", a.dataset.page === page));
+  const view = $("#view");
+  if (!view.innerHTML) view.innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    const html = await Views[page]();
+    if (id !== renderId) return;
+    view.innerHTML = html; Views[page].bind && Views[page].bind(); fillListSelect();
+  } catch (e) {
+    if (id !== renderId) return;
+    view.innerHTML = `<div class="banner err">${esc(e.message || e)}</div>`; console.error(e);
+  }
+}
+
+// ---------------------------------------------------------------- sign-in
+let setupMode = false;
+function showLogin(msg) {
+  $("#app").hidden = true; $("#login").hidden = false; $("#view").innerHTML = "";
+  $("#api").value = API.base();
+  if (msg) $("#login-err").textContent = msg;
+  checkSetup();
+}
+async function checkSetup() {
+  if (!API.base()) return;
+  try {
+    const r = await fetch(API.base() + "/api/status").then((x) => x.json());
+    setupMode = !r.hasAdmin;
+    $("#f-key").hidden = !setupMode; $("#setup-key").required = setupMode;
+    $("#login-title").textContent = setupMode ? "Create the first admin" : "Stream Lists";
+    $("#login-sub").textContent = setupMode ? "No admin yet: enter the setup key you set on the Worker, then your email and a password." : "Sign in with your admin account.";
+    $("#login-btn").textContent = setupMode ? "Create admin" : "Sign in";
+    $("#password").autocomplete = setupMode ? "new-password" : "current-password";
+  } catch (e) { $("#login-err").textContent = "Cannot reach " + API.base(); }
+}
+$("#api").addEventListener("change", () => { store.set("xa_api", $("#api").value.trim().replace(/\/+$/, "")); $("#login-err").textContent = ""; checkSetup(); });
+$("#login-form").onsubmit = async (e) => {
+  e.preventDefault(); const btn = $("#login-btn"); const label = btn.textContent; btn.disabled = true; $("#login-err").textContent = "";
+  store.set("xa_api", $("#api").value.trim().replace(/\/+$/, ""));
+  try {
+    const body = { email: $("#email").value.trim(), password: $("#password").value };
+    const r = setupMode ? await API.post("setup", { ...body, key: $("#setup-key").value }) : await API.post("login", body);
+    store.set("xa_token", r.token); await start();
+  } catch (err) { $("#login-err").textContent = err.message; }
+  finally { btn.disabled = false; btn.textContent = label; }
+};
+async function start() {
+  if (!API.base() || !API.token()) return showLogin();
+  try { S.email = (await API.get("me")).email; } catch (e) { return showLogin(e.message === "Sign in again" ? "" : e.message); }
+  $("#login").hidden = true; $("#app").hidden = false; $("#who").textContent = S.email;
+  try { await Promise.all([Data.lists(), Data.settings()]); } catch (e) { fail(e); }
+  fillListSelect(); render();
+}
+window.addEventListener("hashchange", () => { S.ui.q = ""; S.ui.shown = PAGE; render(); });
+$("#list-select").onchange = (e) => { setList(e.target.value); render(); };
+$("#btn-out").onclick = async () => { try { await API.post("logout"); } catch (e) {} store.set("xa_token", null); showLogin(); };
+start();
+</script>
+</body>
+</html>

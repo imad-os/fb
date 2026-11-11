@@ -1,0 +1,22 @@
+# Deploys the Worker (cloudflare/) when it changes. Needs the repo secret CLOUDFLARE_API_TOKEN
+# ("Edit Cloudflare Workers" template + D1 edit); without it the job does nothing.
+name: Worker (Cloudflare)
+on:
+  push:
+    branches: [master]
+    paths: ["cloudflare/src/**", "cloudflare/migrations/**", "cloudflare/wrangler.toml", ".github/workflows/cloudflare-worker.yml"]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: cloudflare } }
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Deploy
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "No CLOUDFLARE_API_TOKEN secret: skipped"; exit 0; fi
+          npm ci && npx wrangler d1 migrations apply iptv --remote && npx wrangler deploy

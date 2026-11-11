@@ -1,5 +1,8 @@
 # IPTV backend (Firebase project `iptv-8b60c`)
 
+> A second, free-plan copy on **Cloudflare Workers + D1** with the admin page on GitHub Pages lives in
+> [`cloudflare/`](cloudflare/README.md). The two do not share data.
+
 Cloud Functions (region `europe-west1`) + Firebase Hosting for the TV apps:
 
 | Address (Hosting) | Function | What it does |

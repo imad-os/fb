@@ -1,0 +1,28 @@
+# Publishes the Cloudflare version's admin page (cloudflare/admin) on GitHub Pages.
+# Repo Settings > Pages > Source: "GitHub Actions". Optional repo variable IPTV_API = the Worker's address
+# (then the sign-in page fills it in by itself).
+name: Admin page (GitHub Pages)
+on:
+  push:
+    branches: [master]
+    paths: ["cloudflare/admin/**", ".github/workflows/cloudflare-admin-pages.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency: { group: pages, cancel-in-progress: true }
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Worker address
+        if: ${{ vars.IPTV_API != '' }}
+        run: printf 'window.IPTV_API = "%s";\n' "${{ vars.IPTV_API }}" > cloudflare/admin/config.js
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: cloudflare/admin }
+      - id: d
+        uses: actions/deploy-pages@v4

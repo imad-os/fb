@@ -1,0 +1,22 @@
+name = "iptv-lists"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+
+# Create once: npx wrangler d1 create iptv   (then paste the id it prints here)
+[[d1_databases]]
+binding = "DB"
+database_name = "iptv"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[vars]
+# Who may call the admin API from a browser (the GitHub Pages address). Comma separated. "*" = anyone.
+ADMIN_ORIGINS = "https://imad-os.github.io,http://127.0.0.1:8000,http://localhost:8000"
+SUBTITLES_DOMAIN = "iptv-subtitle.geekspro.us"
+
+# Secrets (npx wrangler secret put NAME):
+#   SETUP_KEY          one-time key to create the first admin from the admin page
+#   TMDB_API_KEY       trailers + recommendations
+#   YOUTUBE_API_KEY    trailer fallback
+#   FOOTBALL_KEYS      JSON: [{"url":"https://v3.football.api-sports.io","host":"v3.football.api-sports.io","key":"..."}]
+#   SUBTITLES_TARGET   base64 of the real subtitle host
