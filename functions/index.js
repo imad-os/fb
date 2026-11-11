@@ -11,6 +11,7 @@ const TrailerService = require("./trailer");
 const RecommendationService = require("./recommendations");
 const LocationService = require("./location");
 const XtreamService = require("./includes/xtreamApi"); // Import new Local Service
+const { loadSecrets } = require("./includes/secrets"); // service keys from Firestore, not from the code
 
 initializeApp();
 
@@ -65,6 +66,7 @@ exports.getLocation = onRequest(settings, async (request, response) => {
 
 exports.fetchSubtitles = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
+    await loadSecrets();
     try {
         const { movieData, movieType } = request.body;
         if (!movieData) {
@@ -81,6 +83,7 @@ exports.fetchSubtitles = onRequest(settings, async (request, response) => {
 
 exports.downloadSubtitle = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
+    await loadSecrets();
     try {
         const subtitleUrl = request.query.url || (request.body && request.body.url);
         
@@ -108,6 +111,7 @@ exports.downloadSubtitle = onRequest(settings, async (request, response) => {
 
 exports.searchTrailer = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
+    await loadSecrets();
 
     try {
         const movieName = request.body.movie_name || request.query.movie_name;
@@ -141,6 +145,7 @@ exports.searchTrailer = onRequest(settings, async (request, response) => {
 
 exports.getRecommendations = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
+    await loadSecrets();
 
     try {
         let favorites = request.body.favorites || [];
@@ -175,6 +180,7 @@ exports.getRecommendations = onRequest(settings, async (request, response) => {
 
 exports.footballRequest = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
+    await loadSecrets();
 
     try {
         let endpoint = request.body.endpoint;
@@ -206,6 +212,7 @@ exports.footballRequest = onRequest(settings, async (request, response) => {
 
 exports.footballRecommendations = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
+    await loadSecrets();
 
     try {
         let country = request.body.country || request.query.country;
@@ -248,6 +255,7 @@ exports.footballRecommendations = onRequest(settings, async (request, response) 
 
 exports.footballNews = onRequest(settings, async (request, response) => {
     if (applyMiddleware(request, response)) return;
+    await loadSecrets();
 
     try {
         const langue  = request.body.langue || request.query.langue || "en";

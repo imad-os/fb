@@ -23,6 +23,9 @@ service cloud.firestore {
     match /xtream_streams/{id}    { allow read, write: if isAdmin(); }
     match /xtream_meta/{id}       { allow read, write: if isAdmin(); }
 
+    // Service keys (TMDB, YouTube, football, subtitles) for the Cloud Functions only. No browser access, not even admins.
+    match /xtream_private/{id}    { allow read, write: if false; }
+
     // Used by older TV apps (per account settings + one shared "global" doc).
     match /usersSettings/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || uid == 'global');

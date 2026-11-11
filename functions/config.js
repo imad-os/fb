@@ -1,26 +1,20 @@
 "use strict";
-const footballApis=[
-    {"url":"https://v3.football.api-sports.io","host":"v3.football.api-sports.io", "key":"9e9fb80bd8d4c5c226e8a7f69375995a"},
-    {"url":"https://v3.football.api-sports.io","host":"v3.football.api-sports.io", "key":"d79fe49364b4f281787947da46201ee3"},
-    {"url":"https://api-football-v1.p.rapidapi.com/v3","host":"api-football-v1.p.rapidapi.com", "key":"b7e837cfb4msh0b84d927aa2291dp130d32jsn7b1570d863f8"},
-    {"url":"https://api-football-v1.p.rapidapi.com/v3","host":"api-football-v1.p.rapidapi.com", "key":"b3a3d033ffmsh6e94bc1a2adfb2ap197138jsn33bbf80e8bb2"},
-    {"url":"https://v3.football.api-sports.io","host":"v3.football.api-sports.io", "key":"cb397bed4ae3bce1f341cde74671ec94"},//free sub
-];
+// Service keys are not in this file (the repo is public): see includes/secrets.js.
+// They are read from Firestore (xtream_private/apiKeys) and filled in below by loadSecrets().
+const footballApis=[];
 module.exports = {
     API:footballApis,
 
     // --- SUBTITLES API ---
     SUBTITLES_DOMAIN: "iptv-subtitle.geekspro.us",
-    SUBTITLES_TARGET_ENCODED: "ZXhvYXBwLnR2",
+    SUBTITLES_TARGET_ENCODED: "",
 
     // --- YOUTUBE API ---
-    // TODO: Add your YouTube API Key here
-    YOUTUBE_API_KEY: process.env.YOUTUBE_API_KEY || "AIzaSyAGwuah6_wsPNojzaYDqTsG15tI7V_kQGM", 
+    YOUTUBE_API_KEY: "",
     YOUTUBE_API_URL: "https://www.googleapis.com/youtube/v3/search",
 
     // --- TMDB API ---
-    // TODO: Add your TMDB API Key here
-    TMDB_API_KEY: process.env.TMDB_API_KEY || "4fea759274b31a120afda53601abae83", 
+    TMDB_API_KEY: "",
     TMDB_BASE_URL: "https://api.themoviedb.org/3",
     TMDB_IMAGE_BASE: "https://image.tmdb.org/t/p/w500",
     TMDB_BACKDROP_BASE: "https://image.tmdb.org/t/p/original",
