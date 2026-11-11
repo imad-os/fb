@@ -6,7 +6,7 @@ compatibility_date = "2025-10-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "iptv"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "f0865417-6d52-4ce0-a8e2-247c8b89dbe8"
 migrations_dir = "migrations"
 
 [vars]
