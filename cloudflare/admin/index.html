@@ -172,6 +172,7 @@ dialog form { display: flex; flex-direction: column; max-height: calc(100vh - 34
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7L20 8"/><path d="M20 3v5h-5"/></symbol>
   <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l4 3-1.5 4.5h-5L8 10z"/><path d="M12 3v4M16 10l4.5-1.5M14.5 14.5l2.5 4M9.5 14.5L7 18.5M8 10L3.5 8.5"/></symbol>
   <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
   <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/></symbol>
@@ -208,6 +209,7 @@ dialog form { display: flex; flex-direction: column; max-height: calc(100vh - 34
       <a href="#streams" data-page="streams"><svg class="i"><use href="#i-play"/></svg>Streams<span class="count" id="n-streams"></span></a>
       <a href="#categories" data-page="categories"><svg class="i"><use href="#i-folder"/></svg>Categories<span class="count" id="n-cats"></span></a>
       <a href="#links" data-page="links"><svg class="i"><use href="#i-link"/></svg>Links for users</a>
+      <a href="#football" data-page="football"><svg class="i"><use href="#i-ball"/></svg>Football API<span class="count" id="n-fkeys"></span></a>
       <a href="#settings" data-page="settings"><svg class="i"><use href="#i-gear"/></svg>Settings</a>
     </nav>
     <div class="side-foot">
@@ -862,6 +864,117 @@ Views.settings.bind = () => {
     [{ label: "Cancel", cls: "ghost" }, { label: "Change", onClick: async () => { await API.post("password", { old: $("#p-old").value, new: $("#p-new").value }); toast("Password changed; other devices are signed out", "ok"); } }]);
   document.querySelectorAll("[data-del-admin]").forEach((b) => b.onclick = async () => { try { await API.del("admins/" + b.dataset.delAdmin); toast("Removed", "ok"); render(); } catch (e) { fail(e); } });
 };
+
+// ---- football API keys (used by /footballRequest, /footballRecommendations; tried in order, next one on errors)
+const FB_PROVIDERS = {
+  apisports: { name: "API-Sports (direct)", url: "https://v3.football.api-sports.io", host: "v3.football.api-sports.io" },
+  rapidapi: { name: "RapidAPI", url: "https://api-football-v1.p.rapidapi.com/v3", host: "api-football-v1.p.rapidapi.com" },
+  custom: { name: "Other address", url: "", host: "" }
+};
+const fbProvider = (k) => Object.keys(FB_PROVIDERS).find((p) => p !== "custom" && FB_PROVIDERS[p].url === k.url) || "custom";
+const maskKey = (k) => k.length > 8 ? k.slice(0, 4) + "••••" + k.slice(-4) : "••••";
+function fbTestCell(k) {
+  if (k.test_ok === null || k.test_ok === undefined) return '<span class="dot"></span><span class="muted small">Not tested</span>';
+  const when = k.tested ? new Date(k.tested * 1000).toLocaleString() : "";
+  return `<span class="dot ${k.test_ok ? "up" : "down"}"></span><span class="small" title="${esc(when)}">${esc(k.test_note || (k.test_ok ? "OK" : "Failed"))}</span>`;
+}
+Views.football = async () => {
+  const { keys, fallback } = await API.get("football-keys");
+  S.fkeys = keys; $("#n-fkeys").textContent = keys.length || "";
+  const on = keys.filter((k) => k.enabled).length;
+  return `
+  <div class="head"><div class="grow"><h1>Football API</h1><p>Keys for the football endpoints. They are used in this order; when a key hits its limit or fails, the next one is used.</p></div>
+    ${keys.length ? `<button class="ghost" id="fk-testall">${icon("pulse")}Test all</button>` : ""}
+    <button id="fk-add">${icon("plus")}Add key</button></div>
+  ${!keys.length && fallback ? `<div class="banner warn" style="margin-bottom:14px"><span class="grow">${fallback} keys come from the Worker secret FOOTBALL_KEYS. Copy them here to manage them.</span><button class="small" id="fk-import">Copy ${fallback} keys here</button></div>` : ""}
+  ${keys.length && !on ? `<div class="banner err" style="margin-bottom:14px">No key is on: the football endpoints do not work.</div>` : ""}
+  <div class="card flush">
+    ${keys.length ? `<div class="tbl"><table><thead><tr><th class="num" style="width:40px">#</th><th>Key</th><th class="hide-sm">Provider</th><th>Last test</th><th class="num hide-sm">Calls</th><th></th></tr></thead><tbody>
+    ${keys.map((k, i) => `<tr class="${k.enabled ? "" : "off"}">
+      <td class="num muted">${i + 1}</td>
+      <td><div class="name">${esc(k.label || "Key " + k.id)}${k.enabled ? "" : ' <span class="badge err">Off</span>'}</div><div class="sub mono">${esc(maskKey(k.key))}${k.note ? " · " + esc(k.note) : ""}</div></td>
+      <td class="hide-sm"><div>${esc(FB_PROVIDERS[fbProvider(k)].name)}</div><div class="sub mono">${esc(k.host)}</div></td>
+      <td id="fk-t-${k.id}">${fbTestCell(k)}</td>
+      <td class="num hide-sm" title="${k.last_used ? "Last: " + esc(new Date(k.last_used * 1000).toLocaleString()) : ""}">${k.used || 0}</td>
+      <td class="act">
+        <button class="ghost small" data-fk-test="${k.id}">${icon("pulse")}Test</button>
+        <button class="icon" title="Move up" aria-label="Move up" data-fk-up="${k.id}" ${i ? "" : "disabled"}>▲</button>
+        <button class="icon" title="${k.enabled ? "Turn off" : "Turn on"}" aria-label="${k.enabled ? "Turn off" : "Turn on"}" data-fk-toggle="${k.id}">${icon("power")}</button>
+        <button class="icon" title="Edit" aria-label="Edit" data-fk-edit="${k.id}">${icon("edit")}</button>
+        <button class="icon" title="Delete" aria-label="Delete" data-fk-del="${k.id}">${icon("trash")}</button></td>
+    </tr>`).join("")}</tbody></table></div>` : `<div class="empty">No keys yet. Add your API-Sports or RapidAPI key.</div>`}
+  </div>
+  <p class="small muted" style="margin-top:10px">Test asks the provider's /status (does not count against your daily requests): plan, requests used today / daily limit. "Calls" = requests made through this server.</p>`;
+};
+Views.football.bind = () => {
+  const find = (id) => S.fkeys.find((k) => String(k.id) === String(id));
+  const body = (k, extra) => ({ label: k.label, url: k.url, host: k.host, key: k.key, note: k.note, enabled: !!k.enabled, ord: k.ord, ...extra });
+  $("#fk-add").onclick = () => editFootballKey();
+  const imp = $("#fk-import"); if (imp) imp.onclick = async () => { try { const r = await API.post("football-keys/import-secret"); toast(`${r.added} keys copied`, "ok"); render(); } catch (e) { fail(e); } };
+  const all = $("#fk-testall"); if (all) all.onclick = async () => {
+    all.disabled = true;
+    try { const r = await API.post("football-keys/test-all"); const bad = r.filter((x) => !x.ok).length; toast(bad ? `${bad} of ${r.length} keys failed` : `All ${r.length} keys work`, bad ? "err" : "ok"); render(); } catch (e) { fail(e); all.disabled = false; }
+  };
+  document.querySelectorAll("[data-fk-test]").forEach((b) => b.onclick = async () => {
+    b.disabled = true; $("#fk-t-" + b.dataset.fkTest).innerHTML = '<span class="muted small">Testing…</span>';
+    try { const r = await API.post(`football-keys/${b.dataset.fkTest}/test`); const k = find(r.id); Object.assign(k, { test_ok: r.ok, test_note: r.note, tested: Math.floor(Date.now() / 1000) }); $("#fk-t-" + k.id).innerHTML = fbTestCell(k); }
+    catch (e) { fail(e); } finally { b.disabled = false; }
+  });
+  document.querySelectorAll("[data-fk-toggle]").forEach((b) => b.onclick = async () => {
+    const k = find(b.dataset.fkToggle); b.disabled = true;
+    try { await API.put("football-keys/" + k.id, body(k, { enabled: !k.enabled })); toast(k.enabled ? "Key turned off" : "Key turned on", "ok"); render(); } catch (e) { fail(e); b.disabled = false; }
+  });
+  document.querySelectorAll("[data-fk-up]").forEach((b) => b.onclick = async () => {
+    const i = S.fkeys.findIndex((k) => String(k.id) === b.dataset.fkUp); if (i < 1) return;
+    const order = S.fkeys.slice(); [order[i - 1], order[i]] = [order[i], order[i - 1]];
+    b.disabled = true;
+    try { await Promise.all(order.map((k, n) => k.ord === n ? null : API.put("football-keys/" + k.id, body(k, { ord: n })))); render(); } catch (e) { fail(e); b.disabled = false; }
+  });
+  document.querySelectorAll("[data-fk-edit]").forEach((b) => b.onclick = () => editFootballKey(find(b.dataset.fkEdit)));
+  document.querySelectorAll("[data-fk-del]").forEach((b) => b.onclick = () => {
+    const k = find(b.dataset.fkDel);
+    Dlg.open("Delete key", `<p>Delete <b>${esc(k.label || "Key " + k.id)}</b> (<span class="mono">${esc(maskKey(k.key))}</span>)? This cannot be undone.</p>`, [{ label: "Cancel", cls: "ghost" }, { label: "Delete", cls: "danger", onClick: async () => {
+      await API.del("football-keys/" + k.id); toast("Key deleted", "ok"); render();
+    } }]);
+  });
+};
+function editFootballKey(k) {
+  const isNew = !k; const prov = k ? fbProvider(k) : "apisports";
+  Dlg.open(isNew ? "Add football API key" : "Edit football API key", `
+    <div class="cols">
+      <div class="field"><label class="f" for="fk-label">Name (only for you)</label><input id="fk-label" maxlength="60" value="${esc(k ? k.label : "")}" placeholder="Free account 1"></div>
+      <div class="field"><label class="f" for="fk-prov">Provider</label><select id="fk-prov">${Object.entries(FB_PROVIDERS).map(([id, p]) => `<option value="${id}" ${id === prov ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+    </div>
+    <div class="field"><label class="f" for="fk-key">API key</label><input id="fk-key" class="mono" required maxlength="200" autocomplete="off" spellcheck="false" value="${esc(k ? k.key : "")}"></div>
+    <div id="fk-custom" ${prov === "custom" ? "" : "hidden"}>
+      <div class="field"><label class="f" for="fk-url">API address</label><input id="fk-url" class="mono" type="url" value="${esc(k ? k.url : FB_PROVIDERS[prov].url)}" placeholder="https://v3.football.api-sports.io"></div>
+      <div class="field"><label class="f" for="fk-host">Host header (x-rapidapi-host)</label><input id="fk-host" class="mono" value="${esc(k ? k.host : FB_PROVIDERS[prov].host)}"></div>
+    </div>
+    <div class="field"><label class="f" for="fk-note">Note</label><input id="fk-note" maxlength="200" value="${esc(k ? k.note || "" : "")}"></div>
+    <label class="row small"><input type="checkbox" id="fk-on" ${!k || k.enabled ? "checked" : ""}> On (used by the football endpoints)</label>
+    <div class="row" style="margin-top:14px"><button type="button" class="ghost small" id="fk-try">${icon("pulse")}Test this key</button><span class="small" id="fk-res"></span></div>`,
+    [{ label: "Cancel", cls: "ghost" }, { label: isNew ? "Add key" : "Save", onClick: async () => {
+      const d = read();
+      if (!d.url) { toast("Enter the API address", "err"); return true; }
+      if (isNew) await API.post("football-keys", d); else await API.put("football-keys/" + k.id, { ...d, ord: k.ord });
+      toast(isNew ? "Key added" : "Key saved", "ok"); render();
+    } }]);
+  const read = () => {
+    const p = $("#fk-prov").value; const custom = p === "custom";
+    return { label: $("#fk-label").value.trim(), key: $("#fk-key").value.trim(), note: $("#fk-note").value.trim(), enabled: $("#fk-on").checked,
+      url: custom ? $("#fk-url").value.trim() : FB_PROVIDERS[p].url, host: custom ? $("#fk-host").value.trim() : FB_PROVIDERS[p].host };
+  };
+  $("#fk-prov").onchange = () => {
+    const p = $("#fk-prov").value; $("#fk-custom").hidden = p !== "custom";
+    if (p !== "custom") { $("#fk-url").value = FB_PROVIDERS[p].url; $("#fk-host").value = FB_PROVIDERS[p].host; }
+  };
+  $("#fk-try").onclick = async () => {
+    const d = read(); if (!d.key) { $("#fk-key").reportValidity(); return; }
+    const b = $("#fk-try"); b.disabled = true; $("#fk-res").innerHTML = '<span class="muted">Testing…</span>';
+    try { const r = await API.post("football-keys/test", d); $("#fk-res").innerHTML = `<span class="dot ${r.ok ? "up" : "down"}"></span>${esc(r.note)}`; }
+    catch (e) { $("#fk-res").textContent = e.message; } finally { b.disabled = false; }
+  };
+}
 
 // ---------------------------------------------------------------- shell
 let searchTimer = 0;

@@ -1,7 +1,9 @@
 // The helper APIs of the Firebase version, same paths and same answers:
 // footballRequest, footballRecommendations, footballNews, getLocation, fetchSubtitles, downloadSubtitle,
-// searchTrailer, getRecommendations. Keys come from Worker secrets (see wrangler.toml).
+// searchTrailer, getRecommendations. Keys come from Worker secrets (see wrangler.toml);
+// football keys from D1 (admin page > Football API), see football_keys.js.
 import { json, text, str, num, params } from "./util.js";
+import { footballApis, noteUse } from "./football_keys.js";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 const TMDB = "https://api.themoviedb.org/3";
@@ -25,18 +27,17 @@ const FRIENDLIES = [10, 666];
 const FAVORITE_TEAMS = [85, 50, 541, 529, 23];
 let apiIndex = 0;
 
-function footballApis(env) {
-  try { const a = JSON.parse(env.FOOTBALL_KEYS || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; }
-}
-
 async function footballFetch(env, endpoint, p, round = 0) {
-  const apis = footballApis(env);
-  if (!apis.length) throw new Error("FOOTBALL_KEYS is not set");
+  const apis = await footballApis(env);
+  if (!apis.length) throw new Error("No football API key is on (admin page > Football API)");
   const api = apis[apiIndex % apis.length];
   const path = endpoint.startsWith("/") ? endpoint : "/" + endpoint;
   const r = await getJson(`${api.url}${path}?${qs(p)}`, { headers: { "x-rapidapi-host": api.host, "x-rapidapi-key": api.key } });
+  await noteUse(env, api);
   if (!r.data) throw new Error((r.data && r.data.message) || "Failed to fetch data from Football Provider");
-  if (round < 3 && r.data.errors && Object.keys(r.data.errors).length) {
+  // A key with errors (daily limit, suspended...): try the next keys, each at most once.
+  const failed = (r.data.errors && Object.keys(r.data.errors).length) || (!r.ok && r.data.message && r.data.response === undefined);
+  if (round < Math.min(apis.length - 1, 6) && failed) {
     apiIndex = (apiIndex + 1) % apis.length;
     return footballFetch(env, endpoint, p, round + 1);
   }

@@ -86,6 +86,12 @@ in Cloudflare's cache (by list version), which saves D1 reads; on `*.workers.dev
   down ones are checked twice. Then "Turn off N down" / "Turn on N working again". A turned-off stream is hidden from
   players but stays in the admin (filter "Turned off"; the power button turns one on/off). rtmp/rtsp/udp and bare-IP
   hosts cannot be checked from Cloudflare and are never turned off by the check.
+- **Football API**: the keys used by `/footballRequest`, `/footballRecommendations` (D1 table `football_keys`).
+  Add / edit / delete / turn on-off / reorder; **Test** asks the provider's `/status` (free, does not use your daily
+  requests): plan and requests used today, or the error (suspended, not subscribed...). RapidAPI has no `/status`:
+  its test shows "Key accepted" and the quota from its headers. Keys are tried in order; on an error or a limit the
+  next one is used. "Calls" counts requests made through this Worker. While the table is empty the Worker uses the
+  `FOOTBALL_KEYS` secret (the page offers to copy those keys in).
 - **Links for users**: server address, M3U, EPG, and per user the full message.
 - **Settings**: public address, admins, change password.
 
