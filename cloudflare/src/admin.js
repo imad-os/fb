@@ -2,6 +2,7 @@
 import { json, str, num, now, sha256, randomToken, b64url, same, LIST_ID_RE, extOf } from "./util.js";
 import { checkStreams } from "./check.js";
 import { footballKeysApi } from "./football_keys.js";
+import { subtitleTest } from "./services.js";
 
 const ITER = 20000;            // PBKDF2 rounds (kept low enough for the 10 ms CPU of the free Workers plan)
 const SESSION_DAYS = 30;
@@ -138,6 +139,7 @@ async function route(request, env, url) {
   if (res === "users") return users(env, m, id, request);
   if (res === "categories") return cats(env, m, id, request, url);
   if (res === "streams") return streams(env, m, id, request, url);
+  if (res === "subtitles-test" && m === "POST") return json(await subtitleTest(env, await body(request)));
   if (res === "football-keys") return footballKeysApi(env, m, id, parts[2], request, bad);
   if (res === "import" && m === "POST") return importM3u(env, await body(request));
   // Stream check (admin page "Check streams"): up to 25 ids per request.

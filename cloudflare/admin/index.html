@@ -75,6 +75,7 @@ main { min-width: 0; padding: 26px 32px 60px; }
 .card.flush { padding: 0; overflow: hidden; }
 .banner { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-radius: var(--radius); background: rgba(240,163,58,.1); border: 1px solid rgba(240,163,58,.35); margin-bottom: 16px; flex-wrap: wrap; }
 .banner.err { background: rgba(240,82,90,.1); border-color: rgba(240,82,90,.35); }
+.banner.ok { background: rgba(47,191,113,.1); border-color: rgba(47,191,113,.35); }
 .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .toolbar input, .toolbar select { width: auto; min-width: 160px; }
 .toolbar input[type=search] { flex: 1; min-width: 180px; }
@@ -175,6 +176,7 @@ dialog form { display: flex; flex-direction: column; max-height: calc(100vh - 34
   <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l4 3-1.5 4.5h-5L8 10z"/><path d="M12 3v4M16 10l4.5-1.5M14.5 14.5l2.5 4M9.5 14.5L7 18.5M8 10L3.5 8.5"/></symbol>
   <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
   <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.3 7.5a8 8 0 1 0 11.4 0"/></symbol>
+  <symbol id="i-cc" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M10.5 10.2a2.5 2.5 0 1 0 0 3.6M17 10.2a2.5 2.5 0 1 0 0 3.6"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/></symbol>
 </svg>
 
@@ -210,6 +212,7 @@ dialog form { display: flex; flex-direction: column; max-height: calc(100vh - 34
       <a href="#categories" data-page="categories"><svg class="i"><use href="#i-folder"/></svg>Categories<span class="count" id="n-cats"></span></a>
       <a href="#links" data-page="links"><svg class="i"><use href="#i-link"/></svg>Links for users</a>
       <a href="#football" data-page="football"><svg class="i"><use href="#i-ball"/></svg>Football API<span class="count" id="n-fkeys"></span></a>
+      <a href="#subtitles" data-page="subtitles"><svg class="i"><use href="#i-cc"/></svg>Subtitles</a>
       <a href="#settings" data-page="settings"><svg class="i"><use href="#i-gear"/></svg>Settings</a>
     </nav>
     <div class="side-foot">
@@ -975,6 +978,74 @@ function editFootballKey(k) {
     catch (e) { $("#fk-res").textContent = e.message; } finally { b.disabled = false; }
   };
 }
+
+
+// ---- subtitles test: the same search players make, with the exact error
+const Sub = { type: "movie", name: "", year: "", tmdb: "", season: "1", episode: "1", last: null, dl: {} };
+function subResult(r) {
+  if (!r) return "";
+  const row = (k, v) => v === undefined || v === "" || v === null ? "" : `<tr><td class="muted small" style="width:150px">${esc(k)}</td><td class="mono small" style="word-break:break-all">${esc(v)}</td></tr>`;
+  const head = r.ok && !r.warning ? `<div class="banner ok"><span class="badge ok">Works</span><span>${r.count} subtitle${r.count === 1 ? "" : "s"} found in ${r.ms} ms.</span></div>`
+    : r.ok ? `<div class="banner warn"><span class="badge warn">Works, nothing found</span><span>${esc(r.warning)}</span></div>`
+    : `<div class="banner err"><span class="badge err">Error</span><span>${esc(r.error || "Failed")}</span></div>`;
+  const subs = r.subtitles || [];
+  return `${head}
+    <div class="tbl"><table><tbody>
+      ${row("Subtitle domain", r.domain)}${row("Server really asked", r.target + (r.viaSecret ? " (from the SUBTITLES_TARGET secret)" : ""))}
+      ${row("Address", r.url)}${row("Sent", r.sent ? JSON.stringify(r.sent) : "")}
+      ${row("Status", r.status !== undefined ? `${r.status} ${r.statusText || ""}` : "")}${row("Time", r.ms !== undefined ? r.ms + " ms" : "")}
+      ${row("Content type", r.contentType)}${row("Server's answer", r.body)}
+    </tbody></table></div>
+    ${subs.length ? `<h2 style="margin-top:18px">Subtitles found</h2><div class="tbl"><table><thead><tr><th>Name</th><th class="hide-sm">Language</th><th></th></tr></thead><tbody>
+      ${subs.map((x, i) => { const u = x.url || x.link || x.download || x.file || ""; const d = Sub.dl[i];
+        return `<tr><td><div class="name">${esc(x.name || x.title || x.release || x.filename || ("Subtitle " + (i + 1)))}</div><div class="sub mono">${esc(u)}</div>
+          ${d ? `<div class="small" style="margin-top:4px;color:var(${d.ok && !d.warning ? "--ok" : d.ok ? "--warn" : "--err"})">${esc(d.ok ? (d.warning || `Downloaded ${d.bytes} characters in ${d.ms} ms`) : d.error)}${d.status ? ` (HTTP ${d.status})` : ""}</div>${d.body && d.ok ? `<pre class="share" style="margin-top:6px;max-height:140px;overflow:auto">${esc(d.body.slice(0, 600))}</pre>` : ""}` : ""}</td>
+          <td class="hide-sm">${esc(x.lang || x.language || x.langage || "")}</td>
+          <td class="act">${u ? `<button class="ghost small" data-dl="${i}">Test download</button>` : ""}</td></tr>`; }).join("")}
+    </tbody></table></div>` : ""}`;
+}
+Views.subtitles = async () => {
+  const [vod, series] = await Promise.all([Data.streams("vod"), Data.streams("series")]);
+  const pick = (Sub.type === "series" ? series : vod).slice(0, 2000);
+  return `
+  <div class="head"><div class="grow"><h1>Subtitles</h1><p>Test the subtitle search the players use (Arabic), for a movie or a series episode. Errors are shown exactly as the server gives them.</p></div></div>
+  <div class="card">
+    <div class="tabs" style="margin-bottom:14px"><button type="button" data-st="movie" class="${Sub.type === "movie" ? "on" : ""}">Movie</button><button type="button" data-st="series" class="${Sub.type === "series" ? "on" : ""}">Series</button></div>
+    ${pick.length ? `<div class="field"><label class="f" for="sb-pick">From ${esc(curList().name)} (optional)</label><select id="sb-pick"><option value="">Choose a ${Sub.type === "series" ? "series" : "movie"}</option>${pick.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select></div>` : ""}
+    <div class="cols"><div class="field"><label class="f" for="sb-name">${Sub.type === "series" ? "Series name" : "Movie name"}</label><input id="sb-name" required value="${esc(Sub.name)}" placeholder="${Sub.type === "series" ? "Breaking Bad" : "Inception"}"></div>
+      <div class="field"><label class="f" for="sb-tmdb">TMDB ID (optional)</label><input id="sb-tmdb" class="mono" value="${esc(Sub.tmdb)}"></div></div>
+    ${Sub.type === "series"
+      ? `<div class="cols"><div class="field"><label class="f" for="sb-season">Season</label><input id="sb-season" type="number" min="1" value="${esc(Sub.season)}"></div><div class="field"><label class="f" for="sb-ep">Episode</label><input id="sb-ep" type="number" min="1" value="${esc(Sub.episode)}"></div></div>`
+      : `<div class="field" style="max-width:200px"><label class="f" for="sb-year">Year (optional)</label><input id="sb-year" inputmode="numeric" value="${esc(Sub.year)}"></div>`}
+    <button id="sb-go">${icon("cc")}Test subtitles</button>
+  </div>
+  <div class="card" id="sb-out" ${Sub.last ? "" : "hidden"}>${subResult(Sub.last)}</div>`;
+};
+Views.subtitles.bind = () => {
+  const read = () => { Sub.name = $("#sb-name").value.trim(); Sub.tmdb = $("#sb-tmdb").value.trim();
+    if ($("#sb-year")) Sub.year = $("#sb-year").value.trim(); if ($("#sb-season")) { Sub.season = $("#sb-season").value; Sub.episode = $("#sb-ep").value; } };
+  document.querySelectorAll("[data-st]").forEach((b) => b.onclick = () => { read(); Sub.type = b.dataset.st; Sub.last = null; Sub.dl = {}; render(); });
+  const pk = $("#sb-pick");
+  if (pk) pk.onchange = () => {
+    const x = (S.streams[S.list + ":" + (Sub.type === "series" ? "series" : "vod")] || []).find((s) => String(s.id) === pk.value); if (!x) return;
+    $("#sb-name").value = x.name.replace(/\s*\((\d{4})\)\s*$/, ""); $("#sb-tmdb").value = x.tmdb_id || "";
+    if ($("#sb-year")) $("#sb-year").value = x.year || ((x.name.match(/\((\d{4})\)/) || [])[1] || "");
+  };
+  const show = () => { const o = $("#sb-out"); o.hidden = false; o.innerHTML = subResult(Sub.last); bindDl(); };
+  const bindDl = () => document.querySelectorAll("[data-dl]").forEach((b) => b.onclick = async () => {
+    const i = +b.dataset.dl; const x = Sub.last.subtitles[i]; b.disabled = true; b.textContent = "Testing…";
+    try { Sub.dl[i] = await API.post("subtitles-test", { download: x.url || x.link || x.download || x.file }); } catch (e) { Sub.dl[i] = { ok: false, error: e.message }; }
+    show();
+  });
+  $("#sb-go").onclick = async () => {
+    read(); if (!Sub.name) { $("#sb-name").reportValidity(); return; }
+    const b = $("#sb-go"); b.disabled = true; b.innerHTML = `${icon("cc")}Testing…`;
+    try { Sub.last = await API.post("subtitles-test", { type: Sub.type, name: Sub.name, year: Sub.year, tmdb_id: Sub.tmdb, season: Sub.season, episode: Sub.episode }); }
+    catch (e) { Sub.last = { ok: false, error: e.message }; }
+    Sub.dl = {}; b.disabled = false; b.innerHTML = `${icon("cc")}Test subtitles`; show();
+  };
+  bindDl();
+};
 
 // ---------------------------------------------------------------- shell
 let searchTimer = 0;

@@ -224,6 +224,21 @@ https://src.example.com/live/news.m3u8`);
   r = await fetch(API + "/api/users", { headers: { origin: "https://evil.example" } });
   ok(r.headers.get("access-control-allow-origin") !== "https://evil.example", "admin API not open to other sites");
 
+  console.log("Subtitles test");
+  await page.click("a[data-page=subtitles]"); await page.waitForSelector("#sb-go");
+  await page.fill("#sb-name", "Inception"); await page.fill("#sb-year", "2010"); await page.click("#sb-go");
+  await page.waitForSelector("#sb-out:not([hidden]) .banner");
+  const subTxt = await page.textContent("#sb-out");
+  ok(subTxt.includes("api/get-subtitles") && /Error|Works/.test(subTxt), "movie test shows the address and the result");
+  ok(subTxt.includes('"movie_name":"Inception"') && /"year":"?2010/.test(subTxt), "movie test shows what was sent");
+  await page.click("[data-st=series]"); await page.waitForSelector("#sb-season");
+  await page.fill("#sb-name", "My Show"); await page.fill("#sb-season", "2"); await page.fill("#sb-ep", "5"); await page.click("#sb-go");
+  await page.waitForSelector("#sb-out:not([hidden]) .banner");
+  ok((await page.textContent("#sb-out")).includes("My Show S02E05"), "series test asks for S02E05");
+  await shot(page, "10-subtitles");
+  r = await fetch(API + "/api/subtitles-test", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  ok(r.status === 401, "subtitle test needs an admin");
+
   console.log("Phone width");
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   const pp = await phone.newPage();

@@ -119,7 +119,7 @@ function parseEpisodeName(n) {
   return m ? { series_name: m[1].trim(), season_number: +m[2], episode_number: +m[3] } : {};
 }
 
-async function fetchSubtitles(env, movie, type) {
+function subtitleQuery(movie, type) {
   let q = {};
   if (type === "movie") {
     let name = str(movie.name); let year = null;
@@ -137,10 +137,55 @@ async function fetchSubtitles(env, movie, type) {
     q = p.season_number ? { season_number: p.season_number, episode_number: p.episode_number, movie_name: `${p.series_name} S${String(p.season_number).padStart(2, "0")}E${String(p.episode_number).padStart(2, "0")}` } : { movie_name: n };
   }
   q.langage = "ar"; q.lang = "ar";
+  return q;
+}
+
+async function fetchSubtitles(env, movie, type) {
+  const q = subtitleQuery(movie, type);
   const r = await fetch(fixSubUrl(env, `https://${subtitleHost(env)}/api/get-subtitles`), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(q) });
   if (!r.ok) throw new Error(`HTTP Error: ${r.status}`);
   const d = await r.json();
   return d.status === "success" && Array.isArray(d.subtitles) ? d.subtitles : [];
+}
+
+/**
+ * Admin "Subtitles" test: the same search the players make, with every detail kept
+ * (address asked, what was sent, status, time, the server's own answer or the network error).
+ * t = { type: movie | series, name, year, tmdb_id, season, episode } ; or { download: url }.
+ */
+export async function subtitleTest(env, t) {
+  const out = { domain: subtitleHost(env), target: subtitleTarget(env), viaSecret: !!env.SUBTITLES_TARGET };
+  const call = async (url, init) => {
+    const t0 = Date.now(); out.url = url;
+    let r;
+    try { r = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) }); }
+    catch (e) { out.ms = Date.now() - t0; out.ok = false; out.error = (e && e.name === "TimeoutError" ? "No answer within 15 s" : "Network error: " + (e && e.message || e)); return null; }
+    out.ms = Date.now() - t0; out.status = r.status; out.statusText = r.statusText; out.contentType = r.headers.get("content-type") || "";
+    const body = await r.text(); out.bytes = body.length; out.body = body.slice(0, 3000);
+    out.ok = r.ok; if (!r.ok) out.error = `The subtitle server answered ${r.status} ${r.statusText}`.trim();
+    return body;
+  };
+  if (t.download) {
+    const u = str(t.download);
+    if (!subtitleAllowed(env, u)) { out.ok = false; out.error = "This address is not on the subtitle server, so players could not download it"; return out; }
+    const full = u.startsWith("http") ? u : `https://${subtitleHost(env)}${u}`;
+    const body = await call(fixSubUrl(env, full), {});
+    if (body !== null && out.ok && !/-->/.test(body)) out.warning = "Downloaded, but it does not look like a subtitle file (no --> time lines)";
+    return out;
+  }
+  const movie = t.type === "series"
+    ? { name: str(t.name), series_name: str(t.name), season: num(t.season, 1), episode_num: num(t.episode, 1), series_tmdb_id: str(t.tmdb_id) }
+    : { name: str(t.name) + (t.year ? ` (${t.year})` : ""), tmdb_id: str(t.tmdb_id) };
+  out.sent = subtitleQuery(movie, t.type === "series" ? "series" : "movie");
+  const body = await call(fixSubUrl(env, `https://${subtitleHost(env)}/api/get-subtitles`), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(out.sent) });
+  if (body === null || !out.ok) return out;
+  let d; try { d = JSON.parse(body); } catch (e) { out.ok = false; out.error = "The answer is not JSON (the address is probably wrong)"; return out; }
+  if (d.status !== "success") { out.ok = false; out.error = "The server said: " + str(d.message || d.error || d.status || "no status"); return out; }
+  out.subtitles = Array.isArray(d.subtitles) ? d.subtitles.slice(0, 50) : [];
+  out.count = Array.isArray(d.subtitles) ? d.subtitles.length : 0;
+  if (!out.count) out.warning = "The server works but found no subtitles for this title";
+  delete out.body;
+  return out;
 }
 
 // ------------------------------------------------------------------ trailers
