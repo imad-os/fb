@@ -100,6 +100,16 @@ in Cloudflare's cache (by list version), which saves D1 reads; on `*.workers.dev
   managed on the Subtitles page (add / edit / test / on-off, several keys per provider used in order), and never sent
   to players: results carry `sub:<provider>:<id>` tokens. The page also turns providers on/off, orders them and runs a
   test search with each provider's own answer or error.
+- **Scrapers**: match sites built like Yalla Shoot (`AY_Match` blocks, `/albaplayer/<slug>/?serv=N` players), D1 table
+  `scrapers` (add / edit / delete; days: today always, tomorrow / yesterday optional). **Run** (or **Run all** for the sites
+  that are on) works in the admin page: it reads the site, each match's servers, follows iframes and `document.write`
+  code up to 3 levels to the `.m3u8`, and keeps a stream only if the playlist answers 200, is real HLS (not HTML), does not
+  redirect to another domain, and its first segment is not an HTML page. The streams that work then **replace** the site's
+  Live category (named after the domain, or the name you give) in the list chosen on the page: each run deletes that
+  category first, so it is a refresh. A site that does not answer keeps its streams; a site with no working stream loses
+  its category. Sites are read through the Worker (`GET /api/fetch?url=&referer=&range=`, admins only, 1 request each)
+  or through your own proxy (`PROXY?url=<target>&referer=<ref>`, final address in `x-final-url`) when a site blocks
+  Cloudflare. Keep the page open while it runs. Deleting a site can also delete the streams its last run wrote.
 - **Links for users**: server address, M3U, EPG, and per user the full message.
 - **Settings**: public address, admins, change password.
 

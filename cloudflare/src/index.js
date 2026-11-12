@@ -19,6 +19,7 @@ function cors(request, env, admin) {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Expose-Headers": "x-final-url, x-proxied, content-range",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin"
   };

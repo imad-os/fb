@@ -238,6 +238,78 @@ https://src.example.com/live/news.m3u8`);
   r = await fetch(API + "/api/subtitles-test", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
   ok(r.status === 401, "subtitle test needs an admin");
 
+  console.log("Scrapers (fake Yalla site)");
+  {
+    const SITE = "http://127.0.0.1:8002";
+    const fx = { down: false, goodBroken: false, hits: 0 };
+    const match = (a, b, href, time) => `<div class="AY_Match not_started"><a href="${href}" title="x"></a><div class="TM_Name">${a}</div><div class="MT_Time">${time}</span><div class="MT_Stat">Soon</div><div class="MT_Info"><ul><li><span>beIN 1</span></li></ul></div><div class="TM_Name">${b}</div></div>`;
+    const site = createServer((req, res) => {
+      fx.hits++;
+      const p = new URL(req.url, SITE); const send = (code, body, type = "text/html") => { res.writeHead(code, { "content-type": type }); res.end(body); };
+      if (fx.down && (p.pathname === "/" || p.pathname.startsWith("/matches"))) return send(500, "down");
+      if (p.pathname === "/") return send(200, `<html>${match("Raja", "Wydad", SITE + "/match/derby/", "<span class=\"MT_Time\">21:00")}${match("Team &amp; Co", "Later FC", "#", "<span class=\"MT_Time\">23:00")}</html>`.replace(/<div class="MT_Time">/g, ""));
+      if (p.pathname === "/matches-tomorrow") return send(200, match("Fus", "Far", "/match/tom/", "<span class=\"MT_Time\">18:00").replace(/<div class="MT_Time">/g, ""));
+      if (p.pathname === "/albaplayer/derby/") {
+        if (p.searchParams.get("serv") === "2") return send(200, `<script>var src="${SITE.replace(/\//g, "\\/")}\\/live\\/bad.m3u8";</script>`);
+        if (p.searchParams.get("serv") === "1") return send(200, `<a href="?serv=1">1</a><a href="?serv=2">2</a><iframe src="/embed/one"></iframe><iframe src="https://www.youtube.com/embed/x"></iframe>`);
+        return send(200, `<a href="?serv=1">1</a><a href="?serv=2">2</a>`);
+      }
+      if (p.pathname === "/embed/one") {
+        if (req.headers.referer !== SITE + "/albaplayer/derby/?serv=1") return send(403, "no referer");
+        const hidden = `<script>player.load("${SITE}/live/good/master.m3u8")</script>`.split("").map((c) => "\\x" + c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+        return send(200, `<script>document.write("${hidden}")</script>`);
+      }
+      if (p.pathname === "/albaplayer/tom/") return send(200, `<iframe src="${SITE}/embed/two"></iframe>`);
+      if (p.pathname === "/embed/two") return send(200, `<script>src: 'http://localhost:8002/live/moved.m3u8'</script>`);
+      if (p.pathname === "/live/moved.m3u8") { res.writeHead(302, { location: SITE + "/live/good/v.m3u8" }); return res.end(); }
+      if (p.pathname === "/live/bad.m3u8") return send(200, "<html>blocked</html>");
+      if (p.pathname === "/live/good/master.m3u8") return send(200, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nv.m3u8\n", "application/vnd.apple.mpegurl");
+      if (p.pathname === "/live/good/v.m3u8") return send(200, "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nseg0.ts\n", "application/vnd.apple.mpegurl");
+      if (p.pathname === "/live/good/seg0.ts") return fx.goodBroken ? send(200, "<html>ad</html>") : send(200, Buffer.alloc(4096, 0x47), "video/mp2t");
+      send(404, "nope");
+    }).listen(8002, "127.0.0.1");
+    const tok = await page.evaluate(() => localStorage.getItem("xa_token"));
+    const api = (p) => fetch(API + "/api/" + p, { headers: { authorization: "Bearer " + tok } }).then((x) => x.json());
+    const scrCats = async () => (await api("categories?list=sports")).filter((c) => c.name === "127.0.0.1:8002");
+    const scrStreams = async () => { const ids = (await scrCats()).map((c) => c.id); return (await api("streams?list=sports&type=live")).filter((s) => ids.includes(s.category_id)); };
+    const runOnce = async () => {
+      await page.click("[data-scr-run]");
+      await page.waitForFunction(() => /Done:|Stopped/.test(document.querySelector("#scr-log")?.textContent || ""), null, { timeout: 60000 });
+      await page.waitForSelector("[data-scr-run]:not([disabled])");
+    };
+    r = await fetch(API + "/api/fetch?url=" + encodeURIComponent(SITE + "/"));
+    ok(r.status === 401, "the fetch proxy needs an admin");
+    await page.click("a[data-page=scrapers]"); await page.waitForSelector("#scr-add");
+    await page.click("#scr-add"); await page.fill("#sc-url", SITE); await page.check("#sc-tom");
+    await dlgBtn("Add site"); await page.waitForSelector("[data-scr-run]");
+    ok((await page.textContent("#view")).includes("Category: 127.0.0.1:8002"), "site added, category = its domain");
+    await page.selectOption("#scr-list", "sports");
+    await runOnce();
+    const logText = await page.textContent("#scr-log");
+    ok(/serv1: OK/.test(logText) && /serv2: BAD not a playlist/.test(logText), "hidden (document.write) stream found and checked; HTML playlist refused");
+    ok(/redirects to another domain/.test(logText), "stream redirecting to another domain refused");
+    ok(/no stream page yet/.test(logText), "match without a page skipped");
+    let ss = await scrStreams();
+    ok(ss.length === 1 && ss[0].source === SITE + "/live/good/master.m3u8" && ss[0].name === "21:00 Raja vs Wydad serv1", "one working stream saved in the site's category (" + ss.map((s) => s.name).join(", ") + ")");
+    ok((await page.textContent("#view")).includes("1 stream"), "last run shown");
+    await shot(page, "11-scrapers");
+    await runOnce();
+    ok((await scrCats()).length === 1 && (await scrStreams()).length === 1, "second run replaces the category (no duplicates)");
+    fx.down = true; await runOnce();
+    ok((await page.textContent("#scr-log")).includes("did not answer") && (await scrStreams()).length === 1, "site down: its streams are kept");
+    fx.down = false; fx.goodBroken = true; await runOnce();
+    ok((await scrCats()).length === 0 && (await scrStreams()).length === 0, "no working stream any more: category removed");
+    fx.goodBroken = false; await runOnce();
+    ok((await scrStreams()).length === 1, "back again");
+    await page.click("[data-scr-edit]"); await page.fill("#sc-name", "Yalla"); await dlgBtn("Save"); await page.waitForSelector("#view:has-text('Category: Yalla')");
+    await runOnce();
+    ok((await scrCats()).length === 0 && (await api("categories?list=sports")).filter((c) => c.name === "Yalla").length === 1, "renamed: the old category is replaced by the new one");
+    await page.click("[data-scr-del]"); await page.waitForSelector("#scr-del-streams"); await dlgBtn("Delete");
+    await page.waitForSelector(".empty:has-text('No sites yet')");
+    ok((await api("categories?list=sports")).filter((c) => c.name === "Yalla").length === 0, "deleting the site can delete its streams");
+    site.close();
+  }
+
   console.log("Phone width");
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   const pp = await phone.newPage();
