@@ -100,16 +100,21 @@ in Cloudflare's cache (by list version), which saves D1 reads; on `*.workers.dev
   managed on the Subtitles page (add / edit / test / on-off, several keys per provider used in order), and never sent
   to players: results carry `sub:<provider>:<id>` tokens. The page also turns providers on/off, orders them and runs a
   test search with each provider's own answer or error.
-- **Scrapers**: match sites built like Yalla Shoot (`AY_Match` blocks, `/albaplayer/<slug>/?serv=N` players), D1 table
-  `scrapers` (add / edit / delete; days: today always, tomorrow / yesterday optional). **Run** (or **Run all** for the sites
-  that are on) works in the admin page: it reads the site, each match's servers, follows iframes and `document.write`
-  code up to 3 levels to the `.m3u8`, and keeps a stream only if the playlist answers 200, is real HLS (not HTML), does not
-  redirect to another domain, and its first segment is not an HTML page. The streams that work then **replace** the site's
-  Live category (named after the domain, or the name you give) in the list chosen on the page: each run deletes that
-  category first, so it is a refresh. A site that does not answer keeps its streams; a site with no working stream loses
-  its category. Sites are read through the Worker (`GET /api/fetch?url=&referer=&range=`, admins only, 1 request each)
-  or through your own proxy (`PROXY?url=<target>&referer=<ref>`, final address in `x-final-url`) when a site blocks
-  Cloudflare. Keep the page open while it runs. Deleting a site can also delete the streams its last run wrote.
+- **Scrapers**: match sites of the Yalla Shoot family, D1 table `scrapers` (add / edit / delete; days: today always,
+  tomorrow / yesterday optional; category = the domain unless you name it). **The runs happen in the admin page**
+  (`admin/scraper/`), by hand (**Run**, **Run all**) or at the **daily times** saved on the page (settings row `scrape`:
+  times, proxy, list), while the admin is open and signed in on any page; `/api/scrape-claim` makes sure a time runs once
+  even with several pages open. A run reads each site's match list (finished matches skipped), each match page, its
+  servers, follows iframes and `document.write` code up to 3 levels to the `.m3u8`, and keeps a stream only if the playlist
+  answers 200, is real HLS (not HTML), does not redirect to another domain, and its first segment is not an HTML page.
+  The streams that work then **replace** the site's Live category in the chosen list (`/api/scrapers/<id>/save`): a refresh.
+  A site that does not answer keeps its streams; a site with no working stream loses its category. Sites are read through
+  the proxy if one is set (`PROXY?url=<target>&referer=<ref>`, final address in `x-final-url`, e.g. a local one at
+  `http://127.0.0.1:11436/`), else through the Worker (`GET /api/fetch?url=&referer=&range=`, admins only).
+  **Site templates** (one file each, `admin/scraper/templates.js` explains the shape): list pages `lists/ay-match.js`
+  (`AY_Match` blocks); match pages `players/listed.js` (servers listed on the page: `#match-player` + `data-src`) and
+  `players/albaplayer.js` (`/albaplayer/<slug>/?serv=N`, player address taken from the page's iframe). A new kind of
+  site = a new file + one line in `templates.js`.
 - **Links for users**: server address, M3U, EPG, and per user the full message.
 - **Settings**: public address, admins, change password.
 

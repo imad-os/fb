@@ -1,11 +1,11 @@
-// Match-site scrapers (admin page > Scrapers), for sites on the "Yalla Shoot" template.
-// The crawl itself runs in the admin page (it can take a few hundred requests: too many for one Worker request
-// on the free plan). The page reads the sites through /api/fetch below (or through the admin's own proxy),
-// then sends the streams that work to /api/scrapers/<id>/save, which REPLACES the site's category in the list.
-import { json, str, num } from "./util.js";
+// Match-site scrapers (admin page > Scrapers): the sites (D1 table scrapers) and saving a run's streams.
+// The runs themselves happen in the admin page (cloudflare/admin/scraper/: one file per site template), which reads the
+// sites through /api/fetch below (or the admin's own proxy) and sends the streams that work to /api/scrapers/<id>/save.
+import { json, str, num, now } from "./util.js";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 const FETCH_TIMEOUT_MS = 15000;
+
 const MAX_ITEMS = 1000;
 
 /** "yalla.golf/" or "https://yalla.golf" -> "https://yalla.golf/" (origin + path ending in /), or "". */
@@ -26,17 +26,23 @@ function row(r) {
   return { ...r, tomorrow: !!r.tomorrow, yesterday: !!r.yesterday, enabled: !!r.enabled, category: catName(r) };
 }
 
-/** /api/scrapers[/<id>[/save]] */
+/** /api/scrapers[/<id>] */
 export async function scrapersApi(env, m, parts, request, bad) {
   const id = parts[1] ? num(parts[1]) : 0;
-  const action = parts[2] || "";
   const body = async () => { try { return await request.json(); } catch (e) { return {}; } };
 
+  if (parts[2] === "save" && m === "POST" && id) {
+    const sc = await env.DB.prepare("SELECT * FROM scrapers WHERE id = ?").bind(id).first();
+    if (!sc) bad("Not found", 404);
+    const b = await body();
+    if (!(await env.DB.prepare("SELECT 1 FROM lists WHERE id = ?").bind(str(b.list_id)).first())) bad("Unknown list");
+    const added = await saveSite(env, sc, str(b.list_id), Array.isArray(b.items) ? b.items : [], str(b.note) || "");
+    return json({ ok: true, added, category: added ? catName(sc) : "" });
+  }
   if (m === "GET" && !id) {
     const r = await env.DB.prepare("SELECT * FROM scrapers ORDER BY id").all();
     return json(r.results.map(row));
   }
-  if (action === "save" && m === "POST" && id) return save(env, id, await body(), bad);
 
   if ((m === "POST" && !id) || (m === "PUT" && id)) {
     const b = await body();
@@ -78,18 +84,13 @@ function clearCat(env, list, names) {
   ];
 }
 
-/** { list_id, items: [{ name, url }], note } -> the site's category in that list is replaced by these streams. */
-async function save(env, id, b, bad) {
-  const sc = await env.DB.prepare("SELECT * FROM scrapers WHERE id = ?").bind(id).first();
-  if (!sc) bad("Not found", 404);
-  const list = str(b.list_id);
-  if (!(await env.DB.prepare("SELECT 1 FROM lists WHERE id = ?").bind(list).first())) bad("Unknown list");
+/** Replaces the scraper's category in the list by these streams ([{ name, url }]); used by scraper/job.js. */
+export async function saveSite(env, sc, list, items0, note) {
   const cat = catName(sc);
   const seen = new Set();
-  const items = (Array.isArray(b.items) ? b.items : []).map((i) => ({ name: str(i.name).trim().slice(0, 200) || "Match", url: str(i.url).trim() }))
+  const items = (items0 || []).map((i) => ({ name: str(i.name).trim().slice(0, 200) || "Match", url: str(i.url).trim() }))
     .filter((i) => /^https?:\/\/\S+$/i.test(i.url) && !seen.has(i.url) && seen.add(i.url)).slice(0, MAX_ITEMS);
-  const note = str(b.note).slice(0, 300) || `${items.length} streams`;
-
+  if (!(await env.DB.prepare("SELECT 1 FROM lists WHERE id = ?").bind(list).first())) throw new Error("Unknown list " + list);
   const stmts = clearCat(env, list, [cat, sc.last_list === list ? sc.last_cat : ""]);
   if (sc.last_list && sc.last_list !== list && sc.last_cat) stmts.push(...clearCat(env, sc.last_list, [sc.last_cat]));
   if (items.length) {
@@ -103,9 +104,43 @@ async function save(env, id, b, bad) {
     );
   }
   stmts.push(env.DB.prepare("UPDATE scrapers SET last_run = unixepoch(), last_list = ?, last_cat = ?, last_count = ?, last_note = ? WHERE id = ?")
-    .bind(list, items.length ? cat : "", items.length, note, id));
+    .bind(list, items.length ? cat : "", items.length, str(note).slice(0, 300), sc.id));
   await env.DB.batch(stmts);
-  return json({ ok: true, added: items.length, category: items.length ? cat : "" });
+  return items.length;
+}
+
+// ---- schedule settings (settings row "scrape"): { on, times: ["17:00", ...], proxy, list_id }.
+// The admin page runs all the sites that are on at these times (its own clock) while it is open.
+// /api/scrape-claim { slot: "2026-11-12 17:00" } -> { ok } true only for the first page that asks, so two open pages
+// (or two computers) do not run the same time twice.
+const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+export async function scrapeSettingsApi(env, m, res, request, bad) {
+  let b = {}; try { b = await request.json(); } catch (e) {}
+  if (res === "scrape-claim" && m === "POST") {
+    const slot = str(b.slot);
+    if (!/^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(slot)) bad("Wrong slot");
+    const r = await env.DB.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").bind("scrape_slot:" + slot, String(now())).run();
+    const old = new Date(Date.parse(slot.slice(0, 10)) - 3 * 86400000).toISOString().slice(0, 10);
+    await env.DB.prepare("DELETE FROM settings WHERE key LIKE 'scrape_slot:%' AND key < ?").bind("scrape_slot:" + old).run();
+    return json({ ok: r.meta.changes === 1 });
+  }
+  if (m === "GET") {
+    let v = {}; try { v = JSON.parse(await env.DB.prepare("SELECT value FROM settings WHERE key = 'scrape'").first("value") || "{}"); } catch (e) {}
+    return json({ on: true, times: [], proxy: "", list_id: "default", ...v });
+  }
+  if (m === "PUT") {
+    const times = [...new Set((Array.isArray(b.times) ? b.times : []).map((t) => {
+      const x = TIME_RE.exec(str(t).trim()); if (!x) bad("Times look like 17:00 or 19:30"); return x[1].padStart(2, "0") + ":" + x[2];
+    }))].sort().slice(0, 48);
+    const proxy = str(b.proxy).trim();
+    if (proxy && !/^https?:\/\/\S+$/i.test(proxy)) bad("The proxy is an address like http://127.0.0.1:11436/");
+    const list = str(b.list_id);
+    if (!(await env.DB.prepare("SELECT 1 FROM lists WHERE id = ?").bind(list).first())) bad("Choose the list");
+    const s = { on: b.on !== false, times, proxy, list_id: list };
+    await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('scrape', ?)").bind(JSON.stringify(s)).run();
+    return json(s);
+  }
+  bad("Not found", 404);
 }
 
 /**

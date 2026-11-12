@@ -984,15 +984,14 @@ function editFootballKey(k) {
 }
 
 
-// ---- scrapers: match sites on the "Yalla Shoot" template. The crawl runs here, in the page; each site's streams that
-// pass the check REPLACE its category (the domain) in the chosen list. Sites are read through the Worker (/api/fetch)
-// or through your own proxy (PROXY?url=<target>&referer=<ref>, reports the final address in x-final-url).
-const Scr = { running: false, stop: false, log: [], list: store.get("xa_scr_list", ""), proxy: store.get("xa_scr_proxy", ""), rows: [] };
-const SCR_MAX_DEPTH = 3, SCR_WORKERS = 6;
-const SCR_SKIP_EMBED = ["youtube.com", "youtu.be", "tawk.to", "facebook.com"];
-const SCR_M3U8_RE = /https?:\/\/[^"'\s\\<>]+?\.m3u8[^"'\s\\<>]*/i;
-const scrClean = (s) => s.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#0?39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
+// ---- scrapers: match sites (Yalla Shoot and look-alikes). Runs happen HERE, in this page (admin/scraper/: one file per
+// site template), by hand or at the saved times while the page is open; the Worker keeps the sites, the schedule
+// settings and the streams, and reads the sites for the page when no proxy is set (/api/fetch).
+const Scr = { rows: [], set: null, running: false, stop: false, log: [], trigger: "", started: 0, timer: 0, engine: null };
 const scrHost = (u) => { try { return new URL(u).host; } catch (e) { return u; } };
+const scrDays = (s) => ["Today", s.tomorrow ? "Tomorrow" : "", s.yesterday ? "Yesterday" : ""].filter(Boolean).join(", ");
+const hm = (d = new Date()) => String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+const ymd = (d = new Date()) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 
 function scrLog(t, cls = "") {
   Scr.log.push([t, cls]); if (Scr.log.length > 3000) Scr.log.splice(0, 500);
@@ -1000,229 +999,94 @@ function scrLog(t, cls = "") {
   const d = document.createElement("div"); d.textContent = t; if (cls) d.className = cls;
   box.appendChild(d); box.scrollTop = 1e9;
 }
+const onScrPage = () => (location.hash.slice(1) || "").split("/")[0] === "scrapers";
 
-/** One request to a site: { r, fin } (fin = the address after redirects). */
-async function scrFetch(url, o = {}) {
-  const own = Scr.proxy.trim();
-  if (own) {
-    const p = own + (own.includes("?") ? "&" : "?") + "url=" + encodeURIComponent(url) + (o.referer ? "&referer=" + encodeURIComponent(o.referer) : "");
-    const r = await fetch(p, { headers: o.range ? { Range: o.range } : {}, cache: "no-store" });
-    return { r, fin: r.headers.get("x-final-url") || url };
-  }
-  const q = "url=" + encodeURIComponent(url) + (o.referer ? "&referer=" + encodeURIComponent(o.referer) : "") + (o.range ? "&range=" + encodeURIComponent(o.range) : "");
-  const r = await fetch(API.base() + "/api/fetch?" + q, { headers: { Authorization: "Bearer " + API.token() }, cache: "no-store" });
-  if (!r.headers.get("x-proxied")) {
-    let msg = "Error " + r.status; try { msg = (await r.json()).error || msg; } catch (e) {}
-    if (r.status === 401) { Scr.stop = true; msg = "Sign in again"; }
-    throw new Error(msg);
-  }
-  return { r, fin: r.headers.get("x-final-url") || url };
-}
-async function scrText(url, referer) {
-  try { const { r } = await scrFetch(url, { referer }); return r.ok ? await r.text() : ""; }
-  catch (e) { scrLog("  ! " + url + " -> " + e.message, "dim"); return ""; }
-}
-
-function scrParseMatches(page) {
-  const out = [];
-  for (const chunk of page.split('<div class="AY_Match').slice(1)) {
-    const names = [...chunk.matchAll(/class="TM_Name">([\s\S]*?)<\/div>/g)].map((m) => scrClean(m[1]));
-    if (names.length < 2) continue;
-    const link = chunk.match(/<a\s+href="([^"]+)"/), time = chunk.match(/class="MT_Time">([\s\S]*?)<\/span>/);
-    const stat = chunk.match(/class="MT_Stat">([\s\S]*?)<\/div>/), info = chunk.match(/class="MT_Info">[\s\S]*?<span>([\s\S]*?)<\/span>/);
-    out.push({ teams: names[0] + " vs " + names[1], time: time ? scrClean(time[1]) : "", status: stat ? scrClean(stat[1]) : "",
-      channel: info ? scrClean(info[1]) : "", link: link ? link[1].replace(/&amp;/g, "&") : "" });
-  }
-  return out;
-}
-// some players hide their code in document.write("\x3c\x21...")
-function scrDecode(page) {
-  const texts = [];
-  for (const m of page.matchAll(/document\.write\("((?:[^"\\]|\\.)*)"\)/g)) {
-    let s = m[1].replace(/\\x([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16))).replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
-    texts.push(s.replace(/\\\//g, "/").replace(/\\"/g, '"'));
-  }
-  return texts.join("\n");
-}
-async function scrFindM3u8(url, referer, depth = 0, seen = new Set()) {
-  if (Scr.stop || seen.has(url) || depth > SCR_MAX_DEPTH) return null;
-  seen.add(url);
-  if (/\.m3u8/i.test(url.split("?")[0])) return [url, referer];
-  const page = await scrText(url, referer);
-  if (!page) return null;
-  const text = page.replace(/\\\//g, "/") + "\n" + scrDecode(page);
-  const m = text.match(SCR_M3U8_RE);
-  if (m) return [m[0].replace(/&amp;/g, "&"), url];
-  for (const im of text.matchAll(/<iframe[^>]+src=["']([^"']+)/gi)) {
-    let src; try { src = new URL(im[1].replace(/&amp;/g, "&"), url).href; } catch (e) { continue; }
-    if (!/^https?:/i.test(src) || SCR_SKIP_EMBED.some((h) => scrHost(src).toLowerCase().includes(h))) continue;
-    const r = await scrFindM3u8(src, url, depth + 1, seen);
-    if (r) return r;
-  }
-  return null;
-}
-async function scrServers(link) {
-  const u = new URL(link);
-  const slug = u.pathname.replace(/\/+$/, "").split("/").pop();
-  const player = u.origin + "/albaplayer/" + slug + "/";
-  const first = await scrText(player, link);
-  let nums = [...new Set([...first.matchAll(/[?&]serv=(\d+)/g)].map((m) => +m[1]))].sort((a, b) => a - b);
-  if (!nums.length) nums = [1];
-  const res = [];
-  for (const n of nums) {
-    if (Scr.stop) break;
-    const r = await scrFindM3u8(player + "?serv=" + n, link);
-    if (r) res.push({ n, url: r[0] });
-  }
-  return res;
-}
-async function scrPlaylist(url) {
-  let r, fin;
-  try { ({ r, fin } = await scrFetch(url)); } catch (e) { return { err: "network error: " + e.message }; }
-  if (!r.ok) { try { await r.body?.cancel(); } catch (e) {} return { err: "HTTP " + r.status }; }
-  if (scrHost(fin).toLowerCase() !== scrHost(url).toLowerCase()) { try { await r.body?.cancel(); } catch (e) {} return { err: "redirects to another domain (" + scrHost(fin) + ")" }; }
-  const ct = (r.headers.get("content-type") || "").toLowerCase();
-  const text = (await r.text()).replace(/^﻿/, "").trimStart();
-  if (ct.includes("html") || !text.startsWith("#EXTM3U")) return { err: "not a playlist (HTML or other page)" };
-  return { text, fin };
-}
-async function scrHead(r, max = 2048) {
-  if (!r.body) return new Uint8Array(0);
-  const rd = r.body.getReader(); const parts = []; let n = 0;
-  while (n < max) { const { value, done } = await rd.read(); if (done) break; parts.push(value); n += value.length; }
-  try { await rd.cancel(); } catch (e) {}
-  const all = new Uint8Array(n); let o = 0; for (const p of parts) { all.set(p, o); o += p.length; }
-  return all;
-}
-/** [ok, why]: HTTP 200, a real HLS playlist, no redirect to another domain, first segment is not an HTML page. */
-async function scrCheck(url) {
-  let p = await scrPlaylist(url);
-  if (p.err) return [false, p.err];
-  let lines = p.text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean), cur = p.fin;
-  if (lines.some((l) => l.startsWith("#EXT-X-STREAM-INF"))) {
-    const sub = lines.find((l) => !l.startsWith("#"));
-    if (!sub) return [false, "master playlist without variants"];
-    p = await scrPlaylist(new URL(sub, cur).href);
-    if (p.err) return [false, "variant: " + p.err];
-    cur = p.fin; lines = p.text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-  }
-  const seg = lines.find((l) => !l.startsWith("#"));
-  if (!seg) return [false, "playlist has no segments"];
-  try {
-    const { r } = await scrFetch(new URL(seg, cur).href, { range: "bytes=0-2047" });
-    if (r.status !== 200 && r.status !== 206) { try { await r.body?.cancel(); } catch (e) {} return [false, "first segment HTTP " + r.status]; }
-    const b = await scrHead(r);
-    if (!b.length) return [false, "first segment empty"];
-    let i = 0; while (i < b.length && b[i] <= 32) i++;
-    if (b[i] === 0x3c || b[i] === 0x7b) return [false, "first segment is an HTML page"];
-  } catch (e) { return [false, "first segment: " + e.message]; }
-  return [true, "ok"];
-}
-async function scrPool(items, n, fn) {
-  const out = new Array(items.length); let i = 0;
-  await Promise.all(Array.from({ length: n }, async () => { while (i < items.length && !Scr.stop) { const k = i++; out[k] = await fn(items[k], k); } }));
-  return out;
-}
-
-/** Runs one site and saves its streams into the list. Returns the number saved, or null when nothing was saved. */
-async function scrRunSite(sc, listId, cache) {
-  const site = sc.url, host = scrHost(site);
-  const days = [site]; if (sc.tomorrow) days.push(site + "matches-tomorrow"); if (sc.yesterday) days.push(site + "matches-yesterday");
-  scrLog(`== ${host} -> category "${sc.category}" in list "${listId}"`, "acc");
-  const todo = []; let answered = false, matches = 0;
-  for (const d of days) {
-    if (Scr.stop) break;
-    const page = await scrText(d);
-    if (page && d === site) answered = true;
-    const ms = scrParseMatches(page); matches += ms.length;
-    scrLog(d + ": " + ms.length + " matches", ms.length ? "" : "bad");
-    for (const m of ms) {
-      let root = !m.link || m.link.endsWith("#");
-      if (!root) { try { const u = new URL(m.link, site); root = u.host === host && u.pathname === "/"; } catch (e) { root = true; } }
-      if (root) scrLog("- " + m.teams + " (" + m.time + ", " + m.status + "): no stream page yet", "dim");
-      else todo.push(Object.assign(m, { link: new URL(m.link, site).href }));
-    }
-  }
-  if (Scr.stop) { scrLog("Stopped: nothing saved for " + host, "bad"); return null; }
-  if (!answered) { scrLog(`${host} did not answer: its category was kept as it was`, "bad"); return null; }
-  const results = await scrPool(todo, SCR_WORKERS, async (m) => {
-    scrLog("> " + m.teams + "  [" + m.channel + "]");
-    const items = [];
-    for (const s of await scrServers(m.link)) {
-      if (!cache.has(s.url)) cache.set(s.url, scrCheck(s.url));
-      const [ok, why] = await cache.get(s.url);
-      scrLog("    serv" + s.n + ": " + (ok ? "OK  " : "BAD ") + why + "  " + s.url.slice(0, 90), ok ? "ok" : "bad");
-      if (ok) items.push(s);
-    }
-    return { m, items };
-  });
-  if (Scr.stop) { scrLog("Stopped: nothing saved for " + host, "bad"); return null; }
-  const out = [];
-  for (const { m, items } of results) {
-    const seen = new Set();
-    for (const s of items.sort((a, b) => a.n - b.n)) {
-      if (seen.has(s.url)) continue; seen.add(s.url);
-      out.push({ name: (m.time ? m.time + " " : "") + m.teams + " serv" + s.n, url: s.url });
-    }
-  }
-  const note = `${matches} matches, ${todo.length} with a stream page, ${out.length} working streams`;
-  const r = await API.post(`scrapers/${sc.id}/save`, { list_id: listId, items: out, note });
-  scrLog(`Saved ${host}: ${note} (old "${sc.category}" streams replaced)`, "ok");
-  return r.added;
-}
-async function scrRun(sites) {
-  if (Scr.running) return;
-  const listId = Scr.list || S.list;
-  Scr.running = true; Scr.stop = false; Scr.log = [];
+/** Runs these sites (all that are on when null). trigger: "manual" | "schedule HH:MM". */
+async function scrRun(ids, trigger = "manual") {
+  if (Scr.running) return false;
+  Scr.running = true; Scr.stop = false; Scr.log = []; Scr.trigger = trigger; Scr.started = Date.now();
   const box = $("#scr-log"); if (box) box.textContent = "";
   document.querySelectorAll("[data-scr-run], #scr-all").forEach((b) => b.disabled = true);
-  render();
-  const cache = new Map(); let total = 0, okSites = 0;
-  for (const sc of sites) {
-    if (Scr.stop) break;
-    try { const n = await scrRunSite(sc, listId, cache); if (n !== null) { total += n; okSites++; } }
-    catch (e) { scrLog(`${scrHost(sc.url)}: ${e.message}${Scr.proxy ? " (check the proxy address)" : ""}`, "bad"); }
-  }
-  scrLog(Scr.stop ? "Stopped." : `Done: ${total} working streams from ${okSites} of ${sites.length} site(s)`, Scr.stop ? "bad" : "ok");
+  if (onScrPage()) render();
+  let listId = "";
+  try {
+    const [rows, set] = await Promise.all([API.get("scrapers"), API.get("scrape-settings")]);
+    Scr.rows = rows; Scr.set = set; listId = set.list_id;
+    const sites = ids ? rows.filter((s) => ids.includes(s.id)) : rows.filter((s) => s.enabled);
+    if (!sites.length) throw new Error("No site is on");
+    Scr.engine = Scr.engine || await import("./scraper/engine.js");
+    scrLog((trigger === "manual" ? "Run" : "Scheduled run (" + trigger.slice(9) + ")") + ` of ${sites.length} site(s) into list "${listId}"` +
+      (set.proxy ? ", through the proxy " + set.proxy : ", sites read by the Worker (no proxy)"), "dim");
+    const r = await Scr.engine.runSites(sites, {
+      proxy: set.proxy, api: API.base(), token: API.token(), list_id: listId, log: scrLog, stop: () => Scr.stop,
+      save: (id, d) => API.post(`scrapers/${id}/save`, d)
+    });
+    toast(Scr.stop ? "Stopped" : `${r.total} stream${r.total === 1 ? "" : "s"} saved`, Scr.stop ? "err" : "ok");
+  } catch (e) { scrLog("ERROR: " + e.message, "bad"); fail(e); }
   Scr.running = false;
-  toast(Scr.stop ? "Stopped" : `${total} stream${total === 1 ? "" : "s"} saved`, Scr.stop ? "err" : "ok");
-  if (listId === S.list) await Data.changed(["live"]).catch(() => {}); else { delete S.cats[listId]; delete S.streams[listId + ":live"]; await Data.lists().catch(() => {}); }
-  if ((location.hash.slice(1) || "").split("/")[0] === "scrapers") render();
+  if (listId) { delete S.cats[listId]; delete S.streams[listId + ":live"]; await Data.lists().catch(() => {}); fillListSelect(); }
+  if (onScrPage()) render();
+  return true;
 }
 
-const scrDays = (s) => ["Today", s.tomorrow ? "Tomorrow" : "", s.yesterday ? "Yesterday" : ""].filter(Boolean).join(", ");
+/** Schedule: checked every 20 s while the admin is open and signed in (any page). A time runs once a day, on one page only. */
+async function scrTick() {
+  if (!API.token() || $("#app").hidden || Scr.running) return;
+  try {
+    if (!Scr.set || Date.now() - (Scr.setAt || 0) > 5 * 60000) { Scr.set = await API.get("scrape-settings"); Scr.setAt = Date.now(); }
+    const set = Scr.set; if (!set.on || !set.times.length) return;
+    const now = hm(), day = ymd();
+    const due = set.times.filter((t) => t <= now && toMinutes(now) - toMinutes(t) < 60 && !store.get("xa_scr_ran_" + day + " " + t));
+    if (!due.length) return;
+    due.forEach((t) => store.set("xa_scr_ran_" + day + " " + t, "1"));
+    const t = due[due.length - 1];
+    const claim = await API.post("scrape-claim", { slot: day + " " + t });
+    if (claim.ok) scrRun(null, "schedule " + t);
+  } catch (e) { console.warn("scraper schedule:", e.message); }
+}
+const toMinutes = (t) => +t.slice(0, 2) * 60 + +t.slice(3);
+function scrStartTimer() { if (!Scr.timer) { Scr.timer = setInterval(scrTick, 20000); setTimeout(scrTick, 3000); } }
+
 Views.scrapers = async () => {
-  await Data.lists();
-  Scr.rows = await API.get("scrapers");
-  $("#n-scr").textContent = Scr.rows.length || "";
-  if (!S.lists.some((l) => l.id === Scr.list)) Scr.list = S.list;
-  const lname = (id) => (S.lists.find((l) => l.id === id) || { name: id }).name;
+  const [rows, set] = await Promise.all([API.get("scrapers"), API.get("scrape-settings"), Data.lists()]);
+  Scr.rows = rows; Scr.set = set; Scr.setAt = Date.now();
+  $("#n-scr").textContent = rows.length || "";
   const busy = Scr.running ? "disabled" : "";
+  const lname = (id) => (S.lists.find((l) => l.id === id) || { name: id }).name;
+  const next = set.on && set.times.length ? (set.times.find((t) => t > hm()) || set.times[0] + " tomorrow") : "";
   return `
-  <div class="head"><div class="grow"><h1>Scrapers</h1><p>Match sites built like Yalla Shoot. A run finds today's match streams, keeps only the ones that work, and puts them in the list under a category named after the site. Each run first deletes that category, so it works as a refresh.</p></div>
-    ${Scr.rows.length ? `<button class="ghost" id="scr-all" ${busy}>${icon("refresh")}Run all</button>` : ""}
+  <div class="head"><div class="grow"><h1>Scrapers</h1><p>Match sites (Yalla Shoot and look-alikes). A run finds the match streams, keeps only the ones that work, and puts them in the list under a category named after the site. Each run first deletes that category, so it works as a refresh.</p></div>
+    ${rows.length ? `<button class="ghost" id="scr-all" ${busy}>${icon("refresh")}Run all</button>` : ""}
     <button id="scr-add">${icon("plus")}Add site</button></div>
   <div class="card">
+    <h2>Schedule and settings</h2>
     <div class="cols">
-      <div class="field"><label class="f" for="scr-list">Save into list</label><select id="scr-list" ${busy}>${S.lists.map((l) => `<option value="${esc(l.id)}" ${l.id === Scr.list ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></div>
-      <div class="field"><label class="f" for="scr-proxy">Proxy (optional)</label><input id="scr-proxy" class="mono" type="url" ${busy} value="${esc(Scr.proxy)}" placeholder="Empty = through this server"></div>
+      <div class="field"><label class="f" for="scr-list">Save into list</label><select id="scr-list">${S.lists.map((l) => `<option value="${esc(l.id)}" ${l.id === set.list_id ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select></div>
+      <div class="field"><label class="f" for="scr-proxy">Proxy (optional)</label><input id="scr-proxy" class="mono" value="${esc(set.proxy)}" placeholder="Empty = the Worker reads the sites"></div>
     </div>
-    <p class="small muted" style="margin:0">Empty proxy: the sites are read through this server (Cloudflare). If a site blocks Cloudflare, give your own proxy (<span class="mono">PROXY?url=…&amp;referer=…</span>, final address in <span class="mono">x-final-url</span>). Keep this page open while it runs.</p>
+    <div class="field"><label class="f" for="scr-time">Run all the sites that are on, every day at</label>
+      <div class="row" style="flex-wrap:wrap">${set.times.map((t) => `<span class="badge acc" style="font-size:13px;padding:4px 6px 4px 10px">${esc(t)} <button type="button" class="icon" style="padding:0 2px" aria-label="Remove ${esc(t)}" data-scr-rmt="${esc(t)}">${icon("x")}</button></span>`).join("") || '<span class="muted small">No times yet</span>'}
+        <input id="scr-time" type="time" style="width:auto"> <button type="button" class="ghost small" id="scr-addt">${icon("plus")}Add time</button></div></div>
+    <div class="row" style="flex-wrap:wrap">
+      <label class="row small"><input type="checkbox" id="scr-on" ${set.on ? "checked" : ""}> Schedule on</label>
+      <span class="small muted grow">${next ? `Next run: <b>${esc(next)}</b> (this computer's clock, now ${esc(hm())}). ` : ""}The schedule runs only while this admin is open and signed in, on any page; keep a tab open. Proxy: <span class="mono">PROXY?url=…&amp;referer=…</span>, final address in <span class="mono">x-final-url</span>.</span>
+      <button id="scr-save">Save</button>
+    </div>
   </div>
   <div class="card flush">
-    ${Scr.rows.length ? `<div class="tbl"><table><thead><tr><th>Site</th><th class="hide-sm">Days</th><th>Last run</th><th></th></tr></thead><tbody>
-    ${Scr.rows.map((s) => `<tr class="${s.enabled ? "" : "off"}">
+    ${rows.length ? `<div class="tbl"><table><thead><tr><th>Site</th><th class="hide-sm">Days</th><th>Last run</th><th></th></tr></thead><tbody>
+    ${rows.map((s) => `<tr class="${s.enabled ? "" : "off"}">
       <td><div class="name">${esc(scrHost(s.url))}${s.enabled ? "" : ' <span class="badge err">Off</span>'}</div><div class="sub">Category: ${esc(s.category)}${s.note ? " · " + esc(s.note) : ""}</div></td>
       <td class="hide-sm small">${esc(scrDays(s))}</td>
       <td>${s.last_run ? `<div><span class="badge ${s.last_count ? "ok" : "warn"}">${s.last_count} stream${s.last_count === 1 ? "" : "s"}</span> <span class="small muted">${esc(new Date(s.last_run * 1000).toLocaleString())}</span></div><div class="sub">${esc(s.last_note)}${s.last_list ? " · list " + esc(lname(s.last_list)) : ""}</div>` : '<span class="muted small">Never</span>'}</td>
       <td class="act">
         <button class="small" data-scr-run="${s.id}" ${busy}>${icon("play")}Run</button>
-        <button class="icon" title="Edit" aria-label="Edit" data-scr-edit="${s.id}" ${busy}>${icon("edit")}</button>
+        <button class="icon" title="Edit" aria-label="Edit" data-scr-edit="${s.id}">${icon("edit")}</button>
         <button class="icon" title="Delete" aria-label="Delete" data-scr-del="${s.id}" ${busy}>${icon("trash")}</button></td>
     </tr>`).join("")}</tbody></table></div>` : `<div class="empty">No sites yet. Add one, like https://yalla.golf/</div>`}
   </div>
-  <div class="card" id="scr-log-card" ${Scr.running || Scr.log.length ? "" : "hidden"}>
-    <div class="row" style="margin-bottom:10px"><h2 class="grow" style="margin:0">${Scr.running ? "Running…" : "Last run"}</h2>
+  <div class="card" ${Scr.running || Scr.log.length ? "" : "hidden"}>
+    <div class="row" style="margin-bottom:10px;flex-wrap:wrap"><h2 style="margin:0" class="grow" id="scr-status">${Scr.running ? "Running…" : "Last run"} <span class="small muted">${Scr.trigger.startsWith("schedule") ? "scheduled " + esc(Scr.trigger.slice(9)) : "by hand"} · ${esc(new Date(Scr.started).toLocaleTimeString())}</span></h2>
       ${Scr.running ? `<button class="danger small" id="scr-stop">${icon("x")}Stop</button>` : ""}</div>
     <div id="scr-log" class="mono"></div>
   </div>`;
@@ -1232,12 +1096,22 @@ Views.scrapers.bind = () => {
   const box = $("#scr-log");
   for (const [t, c] of Scr.log) { const d = document.createElement("div"); d.textContent = t; if (c) d.className = c; box.appendChild(d); }
   box.scrollTop = 1e9;
-  $("#scr-list").onchange = (e) => { Scr.list = e.target.value; store.set("xa_scr_list", Scr.list); };
-  $("#scr-proxy").onchange = (e) => { Scr.proxy = e.target.value.trim(); store.set("xa_scr_proxy", Scr.proxy); };
+  let times = Scr.set.times.slice();
+  const saveSet = async () => {
+    const d = { list_id: $("#scr-list").value, proxy: $("#scr-proxy").value.trim(), on: $("#scr-on").checked, times };
+    Scr.set = await API.put("scrape-settings", d); Scr.setAt = Date.now();
+    // times already past today do not run at once
+    const now = hm(), day = ymd(); Scr.set.times.filter((t) => t <= now).forEach((t) => store.set("xa_scr_ran_" + day + " " + t, "1"));
+    toast("Saved", "ok"); render();
+  };
+  $("#scr-save").onclick = () => saveSet().catch(fail);
+  $("#scr-addt").onclick = () => { const t = $("#scr-time").value; if (!t) { $("#scr-time").focus(); return; } times = [...times, t]; saveSet().catch(fail); };
+  $("#scr-time").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("#scr-addt").click(); } };
+  document.querySelectorAll("[data-scr-rmt]").forEach((b) => b.onclick = () => { times = times.filter((t) => t !== b.dataset.scrRmt); saveSet().catch(fail); });
   $("#scr-add").onclick = () => editScraper();
-  const all = $("#scr-all"); if (all) all.onclick = () => { const on = Scr.rows.filter((s) => s.enabled); if (!on.length) toast("No site is on", "err"); else scrRun(on); };
+  const all = $("#scr-all"); if (all) all.onclick = () => scrRun(null);
   const stop = $("#scr-stop"); if (stop) stop.onclick = () => { Scr.stop = true; stop.disabled = true; scrLog("Stopping…", "dim"); };
-  document.querySelectorAll("[data-scr-run]").forEach((b) => b.onclick = () => scrRun([find(b.dataset.scrRun)]));
+  document.querySelectorAll("[data-scr-run]").forEach((b) => b.onclick = () => scrRun([+b.dataset.scrRun]));
   document.querySelectorAll("[data-scr-edit]").forEach((b) => b.onclick = () => editScraper(find(b.dataset.scrEdit)));
   document.querySelectorAll("[data-scr-del]").forEach((b) => b.onclick = () => {
     const s = find(b.dataset.scrDel);
@@ -1578,7 +1452,7 @@ async function start() {
   try { S.email = (await API.get("me")).email; } catch (e) { return showLogin(e.message === "Sign in again" ? "" : e.message); }
   $("#login").hidden = true; $("#app").hidden = false; $("#who").textContent = S.email;
   try { await Promise.all([Data.lists(), Data.settings()]); } catch (e) { fail(e); }
-  fillListSelect(); render();
+  fillListSelect(); render(); scrStartTimer();
 }
 window.addEventListener("hashchange", () => { S.ui.q = ""; S.ui.shown = PAGE; render(); });
 $("#list-select").onchange = (e) => { setList(e.target.value); render(); };
