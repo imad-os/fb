@@ -4,7 +4,7 @@
 // football keys from D1 (admin page > Football API), see football_keys.js.
 import { json, text, str, num, params } from "./util.js";
 import { footballApis, noteUse } from "./football_keys.js";
-import { searchAll, downloadToken } from "./subtitles/index.js";
+import { searchForPlayers, downloadToken, publicProviders } from "./subtitles/index.js";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 const TMDB = "https://api.themoviedb.org/3";
@@ -190,7 +190,7 @@ async function recommendations(env, favorites, watched, limit, type) {
 }
 
 // ------------------------------------------------------------------ router
-export const SERVICE_ROUTES = ["footballRequest", "footballRecommendations", "footballNews", "getLocation", "fetchSubtitles", "downloadSubtitle", "searchTrailer", "getRecommendations"];
+export const SERVICE_ROUTES = ["footballRequest", "footballRecommendations", "footballNews", "getLocation", "fetchSubtitles", "downloadSubtitle", "subtitleProviders", "searchTrailer", "getRecommendations"];
 
 export async function handleService(name, request, env) {
   const url = new URL(request.url);
@@ -220,19 +220,22 @@ export async function handleService(name, request, env) {
       }
       case "getLocation": return json(await location(request, p.ip || ""));
       case "fetchSubtitles": {
-        // { movieData, movieType: movie | series, languages?: "ar,en" } -> every provider that is on, Arabic first by default
-        let movie = p.movieData; if (typeof movie === "string") { try { movie = JSON.parse(movie); } catch (e) { movie = null; } }
-        if (!movie) return json({ error: "Missing movieData" }, 400);
-        return json({ status: "success", subtitles: await searchAll(env, movie, p.movieType || "movie", p.languages || movie.languages) });
+        // { movieData, movieType: movie | series, languages?: "ar,en", provider?: "all" | "subdl" | ... (empty = the admin's default) }
+        // -> { status: "success", provider, cached, subtitles, errors? }  or  { status: "error", message, errors? } with HTTP 4xx/5xx
+        const [body, status] = await searchForPlayers(env, p);
+        return json(body, status);
       }
+      case "subtitleProviders": return json(await publicProviders(env));
       case "downloadSubtitle": {
         // ?url=<the url/file of a search result> -> the subtitle file as UTF-8 text (zips opened, Windows-1256/1252 converted)
-        if (!p.url) return text("Missing 'url' parameter", 400);
+        if (!p.url) return json({ status: "error", code: "bad_request", message: "Missing 'url' parameter" }, 400);
         try {
           const f = await downloadToken(env, p.url);
-          return new Response(f.text, { headers: { "Content-Type": "text/plain; charset=utf-8", "Content-Disposition": `inline; filename="${encodeURIComponent(f.name)}"`, "Cache-Control": "public, max-age=86400" } });
+          return new Response(f.text, { headers: { "Content-Type": "text/plain; charset=utf-8", "Content-Disposition": `inline; filename="${encodeURIComponent(f.name)}"`, "Cache-Control": "public, max-age=86400", "X-Subtitle-Cache": f.cached ? "hit" : "miss" } });
         } catch (e) {
-          return text(e.status === 400 ? "Only subtitles from a search can be downloaded here" : "Failed to download: " + (e.message || e), e.status === 400 ? 400 : 502);
+          if (e.status === 400) return json({ status: "error", code: "bad_request", message: "Only subtitles from a search can be downloaded here" }, 400);
+          if (e.status === 429) return json({ status: "error", code: "limit", message: String(e.message || e) }, 429);
+          return json({ status: "error", code: "provider_error", message: String(e.message || e) }, 502);
         }
       }
       case "searchTrailer": {

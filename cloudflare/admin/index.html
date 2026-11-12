@@ -981,7 +981,36 @@ function editFootballKey(k) {
 
 
 // ---- subtitles: providers (one file each on the Worker: src/subtitles/*.js), their API keys (D1), and a test search
-const Sub = { type: "movie", name: "", year: "", tmdb: "", season: "1", episode: "1", langs: "ar,en", last: null, dl: {}, data: null };
+const Sub = { type: "movie", name: "", year: "", tmdb: "", season: "1", episode: "1", langs: "ar,en", prov: "default", fresh: false, last: null, dl: {}, data: null,
+  range: store.get("xa_sub_range", "7d"), who: store.get("xa_sub_who", "all"), usage: null };
+const fmtN = (n) => Number(n || 0).toLocaleString();
+const fmtBytes = (b) => b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+const usageCells = (u) => `<td class="num hide-sm">${fmtN(u.d1)}</td><td class="num hide-sm">${fmtN(u.d7)}</td><td class="num hide-sm">${fmtN(u.d30)}</td>`;
+/** Calls per hour (24h) or per day (7d / 30d), one series: bars + hover tooltip with searches / downloads / errors. */
+function usageChart(u) {
+  const b = u.buckets, W = 720, H = 180, L = 40, R = 8, T = 12, B = 26;
+  const calls = b.map((x) => x.searches + x.downloads);
+  const max = Math.max(1, ...calls);
+  const step = Math.pow(10, Math.floor(Math.log10(max))); const top = Math.ceil(max / step) * step;
+  const slot = (W - L - R) / b.length, bw = Math.max(2, slot - 2);
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  const day = u.range !== "24h";
+  const lab = (t) => day ? new Date(t * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : new Date(t * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const every = day ? (b.length > 10 ? 5 : 1) : 4;
+  const grid = [0, top / 2, top].map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1" ${v ? 'stroke-dasharray="2 4"' : ""}/>
+    <text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--text-2)">${fmtN(v)}</text>`).join("");
+  const bars = b.map((x, i) => {
+    const v = calls[i], h = v ? Math.max(3, y(0) - y(v)) : 0, xx = L + i * slot + (slot - bw) / 2;
+    const tip = `${day ? lab(x.t) : lab(x.t) + " (" + new Date(x.t * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" }) + ")"}: ${fmtN(v)} calls · ${fmtN(x.searches)} searches · ${fmtN(x.downloads)} downloads${x.errors ? " · " + fmtN(x.errors) + " errors" : ""}`;
+    return `<g class="ub" data-tip="${esc(tip)}"><rect x="${L + i * slot}" y="${T}" width="${slot}" height="${H - T - B}" fill="transparent"/>
+      ${h ? `<path d="M${xx},${y(0)} v${-(h - Math.min(4, h / 2))} q0,-${Math.min(4, h / 2)} ${Math.min(4, bw / 2)},-${Math.min(4, h / 2)} h${bw - 2 * Math.min(4, bw / 2)} q${Math.min(4, bw / 2)},0 ${Math.min(4, bw / 2)},${Math.min(4, h / 2)} v${h - Math.min(4, h / 2)} z" fill="var(--accent)"/>` : ""}
+      ${i % every === 0 ? `<text x="${L + i * slot + slot / 2}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--text-2)">${esc(lab(x.t))}</text>` : ""}</g>`;
+  }).join("");
+  return `<div class="uchart" style="position:relative"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Calls per ${day ? "day" : "hour"}">${grid}${bars}</svg>
+    <div class="utip" hidden style="position:absolute;pointer-events:none;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.3)"></div></div>
+    <details style="margin-top:8px"><summary class="small muted">Table</summary><div class="tbl"><table><thead><tr><th>${day ? "Day" : "Hour"}</th><th class="num">Searches</th><th class="num">Downloads</th><th class="num">Errors</th></tr></thead><tbody>
+      ${b.slice().reverse().map((x) => `<tr><td>${esc(lab(x.t))}</td><td class="num">${fmtN(x.searches)}</td><td class="num">${fmtN(x.downloads)}</td><td class="num">${fmtN(x.errors)}</td></tr>`).join("")}</tbody></table></div></details>`;
+}
 const subTestCell = (k) => k.test_ok === null || k.test_ok === undefined ? '<span class="dot"></span><span class="muted small">Not tested</span>'
   : `<span class="dot ${k.test_ok ? "up" : "down"}"></span><span class="small" title="${esc(k.tested ? new Date(k.tested * 1000).toLocaleString() : "")}">${esc(k.test_note || (k.test_ok ? "OK" : "Failed"))}</span>`;
 function subResult(r) {
@@ -991,7 +1020,7 @@ function subResult(r) {
   const q = r.q || {};
   return `
     <div class="${subs.length ? "banner ok" : "banner warn"}"><span class="badge ${subs.length ? "ok" : "warn"}">${subs.length ? "Works" : "Nothing found"}</span>
-      <span>${subs.length} subtitle${subs.length === 1 ? "" : "s"} in ${r.ms} ms · searched as <b>${esc(q.title || "")}</b>${q.year ? " (" + esc(q.year) + ")" : ""}${q.season ? ` S${esc(q.season)}E${esc(q.episode)}` : ""} · TMDB ${esc(q.tmdb || "–")} · IMDb ${esc(q.imdb || "–")} · ${esc((q.langs || []).join(", "))}</span></div>
+      <span>${r.cached ? '<span class="badge acc">From cache</span> ' : ""}${subs.length} subtitle${subs.length === 1 ? "" : "s"} in ${r.ms} ms · searched as <b>${esc(q.title || "")}</b>${q.year ? " (" + esc(q.year) + ")" : ""}${q.season ? ` S${esc(q.season)}E${esc(q.episode)}` : ""} · TMDB ${esc(q.tmdb || "–")} · IMDb ${esc(q.imdb || "–")} · ${esc((q.langs || []).join(", "))}</span></div>
     <div class="tbl"><table><thead><tr><th>Provider</th><th class="num">Found</th><th class="num hide-sm">Time</th><th>Result</th></tr></thead><tbody>
       ${(r.providers || []).map((p) => `<tr><td>${esc(p.name)}</td><td class="num">${p.count}</td><td class="num hide-sm">${p.ms} ms</td>
         <td>${p.ok ? '<span class="dot up"></span><span class="small">OK</span>' : `<span class="dot down"></span><span class="small">${esc(p.error)}</span>`}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No provider is on.</td></tr>'}
@@ -999,14 +1028,14 @@ function subResult(r) {
     ${subs.length ? `<h2 style="margin-top:18px">Subtitles found</h2><div class="tbl"><table><thead><tr><th>Name</th><th>Language</th><th class="hide-sm">Provider</th><th></th></tr></thead><tbody>
       ${subs.map((x, i) => { const d = Sub.dl[i];
         return `<tr><td><div class="name">${esc(x.name)}${x.hi ? ' <span class="badge">HI</span>' : ""}</div>${x.by ? `<div class="sub">${esc(x.by)}</div>` : ""}
-          ${d ? `<div class="small" style="margin-top:4px;color:var(${d.ok ? "--ok" : "--err"})">${esc(d.ok ? `Downloaded in ${d.ms} ms: ${d.name} · ${d.lines} lines · ${d.chars} characters (UTF-8)` : d.error)}</div>${d.ok ? `<pre class="share" dir="auto" style="margin-top:6px;max-height:160px;overflow:auto">${esc(d.preview.slice(0, 700))}</pre>` : ""}` : ""}</td>
+          ${d ? `<div class="small" style="margin-top:4px;color:var(${d.ok ? "--ok" : "--err"})">${esc(d.ok ? `${d.cached ? "From cache" : "Downloaded"} in ${d.ms} ms: ${d.name} · ${d.lines} lines · ${d.chars} characters (UTF-8)` : d.error)}</div>${d.ok ? `<pre class="share" dir="auto" style="margin-top:6px;max-height:160px;overflow:auto">${esc(d.preview.slice(0, 700))}</pre>` : ""}` : ""}</td>
           <td>${esc(x.language || x.lang)}</td><td class="hide-sm small">${esc(x.providerName || x.provider)}</td>
           <td class="act"><button class="ghost small" data-dl="${i}">Test download</button></td></tr>`; }).join("")}
     </tbody></table></div>` : ""}`;
 }
 Views.subtitles = async () => {
-  const [data, vod, series] = await Promise.all([API.get("subtitles"), Data.streams("vod"), Data.streams("series")]);
-  Sub.data = data;
+  const [data, vod, series, use] = await Promise.all([API.get("subtitles"), Data.streams("vod"), Data.streams("series"), API.get(`subtitles/usage?range=${Sub.range}&who=${encodeURIComponent(Sub.who)}`)]);
+  Sub.data = data; Sub.usage = use;
   const pick = (Sub.type === "series" ? series : vod).slice(0, 2000);
   const pn = Object.fromEntries(data.providers.map((p) => [p.id, p.name]));
   const keyed = data.providers.filter((p) => p.needsKey);
@@ -1015,12 +1044,38 @@ Views.subtitles = async () => {
     <button class="ghost" id="sk-testall" ${data.keys.length ? "" : "disabled"}>${icon("pulse")}Test all keys</button>
     <button id="sk-add">${icon("plus")}Add key</button></div>
 
-  <div class="card flush"><div class="toolbar"><b>Providers</b><span class="muted small">Order = order of the results. A provider that needs a key works once it has one.</span></div>
-    <div class="tbl"><table><thead><tr><th>Provider</th><th class="hide-sm">Key</th><th>State</th><th></th></tr></thead><tbody>
+  <div class="card">
+    <div class="cols">
+      <div class="field"><label class="f" for="sd-def">Provider the players use (when they don't choose one)</label>
+        <select id="sd-def"><option value="all" ${data.default === "all" ? "selected" : ""}>All providers that are on, at once (most results)</option>
+          ${data.providers.map((p) => `<option value="${p.id}" ${data.default === p.id ? "selected" : ""}>${esc(p.name)} only${p.usable ? "" : " (needs a key / off)"}</option>`).join("")}</select>
+        <p class="small muted" style="margin-top:6px">Apps can still ask for one: <span class="mono">provider=subdl</span> in /fetchSubtitles; the list is at <span class="mono">/subtitleProviders</span>. If it fails, they get <span class="mono">status: "error"</span> and the provider's message.</p></div>
+      <div class="field"><label class="f">Cache (saves API calls)</label>
+        <div class="small">${fmtN(data.cache.searches)} searches and ${fmtN(data.cache.files)} files kept (${fmtBytes(data.cache.bytes || 0)}) · served from cache: ${fmtN(data.cache.hits.d1)} today, ${fmtN(data.cache.hits.d7)} in 7 days, ${fmtN(data.cache.hits.d30)} in 30 days</div>
+        <p class="small muted" style="margin:6px 0">Results are kept 24 h (2 h when nothing was found), files 30 days. A search where a provider failed is not kept.</p>
+        <button class="ghost small" id="sc-clear">${icon("trash")}Clear cache</button></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="row" style="flex-wrap:wrap;gap:10px;margin-bottom:10px"><h2 class="grow" style="margin:0">Usage</h2>
+      <select id="su-who" aria-label="Show usage of">
+        <option value="all" ${Sub.who === "all" ? "selected" : ""}>All providers</option>
+        ${data.keys.map((k) => `<option value="key:${k.id}" ${Sub.who === "key:" + k.id ? "selected" : ""}>Key: ${esc(k.label || pn[k.provider])}</option>`).join("")}
+        ${data.providers.map((p) => `<option value="provider:${p.id}" ${Sub.who === "provider:" + p.id ? "selected" : ""}>Provider: ${esc(p.name)}</option>`).join("")}
+        <option value="cache" ${Sub.who === "cache" ? "selected" : ""}>Served from cache (calls saved)</option></select>
+      <div class="tabs">${["24h", "7d", "30d"].map((r) => `<button type="button" data-ur="${r}" class="${Sub.range === r ? "on" : ""}">${r === "24h" ? "24 hours" : r === "7d" ? "7 days" : "30 days"}</button>`).join("")}</div></div>
+    <div class="check-stats" style="margin:0 0 12px"><div>Calls<b>${fmtN(use.total.searches + use.total.downloads)}</b></div><div>Searches<b>${fmtN(use.total.searches)}</b></div><div>Downloads<b>${fmtN(use.total.downloads)}</b></div><div>Errors<b>${fmtN(use.total.errors)}</b></div></div>
+    ${usageChart(use)}
+  </div>
+
+  <div class="card flush" style="margin-top:16px"><div class="toolbar"><b>Providers</b><span class="muted small">Order = order of the results. A provider that needs a key works once it has one. Calls = searches + downloads.</span></div>
+    <div class="tbl"><table><thead><tr><th>Provider</th><th class="hide-sm">Key</th><th>State</th><th class="num hide-sm">24 h</th><th class="num hide-sm">7 d</th><th class="num hide-sm">30 d</th><th></th></tr></thead><tbody>
     ${data.providers.map((p, i) => `<tr class="${p.on ? "" : "off"}">
       <td><div class="name">${esc(p.name)}</div><div class="sub"><a href="${esc(p.site)}" target="_blank" rel="noopener">${esc(p.site.replace(/^https?:\/\//, "").replace(/\/$/, ""))}</a>${p.kinds.length === 1 ? " · TV only" : ""}</div></td>
       <td class="hide-sm small">${p.needsKey ? `${p.liveKeys} key${p.liveKeys === 1 ? "" : "s"} on${p.keys > p.liveKeys ? ` (${p.keys - p.liveKeys} off)` : ""}` : '<span class="muted">No key needed</span>'}</td>
-      <td id="sp-t-${p.id}">${!p.on ? '<span class="badge err">Off</span>' : p.usable ? '<span class="badge ok">On</span>' : '<span class="badge warn">Needs a key</span>'}</td>
+      <td id="sp-t-${p.id}">${!p.on ? '<span class="badge err">Off</span>' : p.usable ? '<span class="badge ok">On</span>' : '<span class="badge warn">Needs a key</span>'}${data.default === p.id ? ' <span class="badge acc">Default</span>' : ""}</td>
+      ${usageCells(p.usage)}
       <td class="act">
         <button class="ghost small" data-sp-test="${p.id}" ${p.needsKey && !p.liveKeys ? "disabled" : ""}>${icon("pulse")}Test</button>
         <button class="icon" title="Move up" aria-label="Move up" data-sp-up="${p.id}" ${i ? "" : "disabled"}>▲</button>
@@ -1029,12 +1084,12 @@ Views.subtitles = async () => {
     </tr>`).join("")}</tbody></table></div></div>
 
   <div class="card flush" style="margin-top:16px"><div class="toolbar"><b>API keys</b><span class="muted small">Several keys for one provider: used in order, the next one when a key is refused or over its limit.</span></div>
-    ${data.keys.length ? `<div class="tbl"><table><thead><tr><th>Key</th><th class="hide-sm">Provider</th><th>Last test</th><th class="num hide-sm">Calls</th><th></th></tr></thead><tbody>
+    ${data.keys.length ? `<div class="tbl"><table><thead><tr><th>Key</th><th class="hide-sm">Provider</th><th>Last test</th><th class="num hide-sm">24 h</th><th class="num hide-sm">7 d</th><th class="num hide-sm">30 d</th><th></th></tr></thead><tbody>
     ${data.keys.map((k) => `<tr class="${k.enabled ? "" : "off"}">
       <td><div class="name">${esc(k.label || pn[k.provider] + " key")}${k.enabled ? "" : ' <span class="badge err">Off</span>'}</div><div class="sub mono">${esc(maskKey(k.key))}${k.note ? " · " + esc(k.note) : ""}</div></td>
       <td class="hide-sm">${esc(pn[k.provider] || k.provider)}</td>
       <td id="sk-t-${k.id}">${subTestCell(k)}</td>
-      <td class="num hide-sm" title="${k.last_used ? "Last: " + esc(new Date(k.last_used * 1000).toLocaleString()) : ""}">${k.used || 0}</td>
+      ${usageCells(k.usage)}
       <td class="act"><button class="ghost small" data-sk-test="${k.id}">${icon("pulse")}Test</button>
         <button class="icon" title="${k.enabled ? "Turn off" : "Turn on"}" aria-label="${k.enabled ? "Turn off" : "Turn on"}" data-sk-toggle="${k.id}">${icon("power")}</button>
         <button class="icon" title="Edit" aria-label="Edit" data-sk-edit="${k.id}">${icon("edit")}</button>
@@ -1052,6 +1107,12 @@ Views.subtitles = async () => {
         ? `<div class="field"><label class="f" for="sb-season">Season</label><input id="sb-season" type="number" min="1" value="${esc(Sub.season)}"></div><div class="field"><label class="f" for="sb-ep">Episode</label><input id="sb-ep" type="number" min="1" value="${esc(Sub.episode)}"></div>`
         : `<div class="field"><label class="f" for="sb-year">Year (optional)</label><input id="sb-year" inputmode="numeric" value="${esc(Sub.year)}"></div>`}
       <div class="field"><label class="f" for="sb-langs">Languages (in order)</label><input id="sb-langs" class="mono" value="${esc(Sub.langs)}" placeholder="ar,en"></div></div>
+    <div class="cols">
+      <div class="field"><label class="f" for="sb-prov">Provider</label><select id="sb-prov">
+        <option value="default" ${Sub.prov === "default" ? "selected" : ""}>The default (${esc(data.default === "all" ? "all providers" : pn[data.default] || data.default)})</option>
+        <option value="all" ${Sub.prov === "all" ? "selected" : ""}>All providers that are on</option>
+        ${data.providers.map((p) => `<option value="${p.id}" ${Sub.prov === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+      <div class="field"><label class="f">&nbsp;</label><label class="row small"><input type="checkbox" id="sb-fresh" ${Sub.fresh ? "checked" : ""}> Skip the cache (ask the providers again)</label></div></div>
     <button id="sb-go">${icon("cc")}Search subtitles</button>
   </div>
   <div class="card" id="sb-out" ${Sub.last ? "" : "hidden"}>${subResult(Sub.last)}</div>`;
@@ -1059,6 +1120,20 @@ Views.subtitles = async () => {
 Views.subtitles.bind = () => {
   const data = Sub.data;
   const findKey = (id) => data.keys.find((k) => String(k.id) === String(id));
+  $("#sd-def").onchange = async (e) => { try { await API.put("subtitles/default", { provider: e.target.value }); toast("Default provider saved", "ok"); render(); } catch (er) { fail(er); } };
+  $("#sc-clear").onclick = () => Dlg.open("Clear the subtitle cache", "<p>Every saved search and file is removed. The next searches ask the providers again (they use API calls).</p>", [{ label: "Cancel", cls: "ghost" }, { label: "Clear", cls: "danger", onClick: async () => {
+    const r = await API.del("subtitles/cache"); toast(`${r.deleted} cached items removed`, "ok"); render(); } }]);
+  $("#su-who").onchange = (e) => { Sub.who = e.target.value; store.set("xa_sub_who", Sub.who); render(); };
+  document.querySelectorAll("[data-ur]").forEach((b) => b.onclick = () => { Sub.range = b.dataset.ur; store.set("xa_sub_range", Sub.range); render(); });
+  const chart = document.querySelector(".uchart"), tip = chart && chart.querySelector(".utip");
+  if (chart) {
+    chart.addEventListener("mousemove", (e) => {
+      const g = e.target.closest(".ub"); if (!g) { tip.hidden = true; return; }
+      const box = chart.getBoundingClientRect(); tip.textContent = g.dataset.tip; tip.hidden = false;
+      const x = Math.min(e.clientX - box.left + 12, box.width - tip.offsetWidth - 4); tip.style.left = Math.max(0, x) + "px"; tip.style.top = Math.max(0, e.clientY - box.top - 40) + "px";
+    });
+    chart.addEventListener("mouseleave", () => { tip.hidden = true; });
+  }
   const keyBody = (k, extra) => ({ provider: k.provider, label: k.label, key: k.key, note: k.note, enabled: !!k.enabled, ord: k.ord, ...extra });
   const busy = async (b, fn) => { b.disabled = true; try { await fn(); } catch (e) { fail(e); b.disabled = false; } };
   $("#sk-add").onclick = () => editSubKey();
@@ -1091,7 +1166,7 @@ Views.subtitles.bind = () => {
   });
 
   // test search
-  const read = () => { Sub.name = $("#sb-name").value.trim(); Sub.tmdb = $("#sb-tmdb").value.trim(); Sub.langs = $("#sb-langs").value.trim() || "ar,en";
+  const read = () => { Sub.name = $("#sb-name").value.trim(); Sub.tmdb = $("#sb-tmdb").value.trim(); Sub.langs = $("#sb-langs").value.trim() || "ar,en"; Sub.prov = $("#sb-prov").value; Sub.fresh = $("#sb-fresh").checked;
     if ($("#sb-year")) Sub.year = $("#sb-year").value.trim(); if ($("#sb-season")) { Sub.season = $("#sb-season").value; Sub.episode = $("#sb-ep").value; } };
   document.querySelectorAll("[data-st]").forEach((b) => b.onclick = () => { read(); Sub.type = b.dataset.st; Sub.last = null; Sub.dl = {}; render(); });
   const pk = $("#sb-pick");
@@ -1109,7 +1184,7 @@ Views.subtitles.bind = () => {
   $("#sb-go").onclick = async () => {
     read(); if (!Sub.name) { $("#sb-name").reportValidity(); return; }
     const b = $("#sb-go"); b.disabled = true; b.innerHTML = `${icon("cc")}Searching…`;
-    try { Sub.last = await API.post("subtitles-test", { type: Sub.type, name: Sub.name, year: Sub.year, tmdb_id: Sub.tmdb, season: Sub.season, episode: Sub.episode, languages: Sub.langs }); }
+    try { Sub.last = await API.post("subtitles-test", { type: Sub.type, name: Sub.name, year: Sub.year, tmdb_id: Sub.tmdb, season: Sub.season, episode: Sub.episode, languages: Sub.langs, provider: Sub.prov, fresh: Sub.fresh }); }
     catch (e) { Sub.last = { error: e.message }; }
     Sub.dl = {}; b.disabled = false; b.innerHTML = `${icon("cc")}Search subtitles`; show();
   };

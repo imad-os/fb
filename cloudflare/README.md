@@ -117,3 +117,14 @@ npm run db:local && npm run dev          # Worker on http://127.0.0.1:8787
 python3 -m http.server 8000 -d admin     # admin page on http://127.0.0.1:8000
 npm test                                 # full browser test (Playwright), SHOTS=<folder> for screenshots
 ```
+
+## Subtitles API for apps
+- `GET /subtitleProviders` -> `{ status: "success", default: "<id>" | "auto", providers: [{ id, name, usable, kinds, langs? }] }` (providers that are on).
+- `POST /fetchSubtitles/` `{ movieData: { name, tmdb_id?, year?, season?, episode_num? }, movieType: "movie" | "series", provider?: "<id>" | "auto", lang?: "ar" | "en" | ... | "auto" }`
+  (missing = auto: the admin's default provider, or all that are on; languages ar then en).
+  Success: `{ status: "success", provider, cached, subtitles: [{ label, name, lang, url, file, provider, ... }], errors? }` (an empty list is not an error).
+- `GET /downloadSubtitle/?url=<a result's url>` -> the file as UTF-8 text (`X-Subtitle-Cache: hit | miss`).
+- Errors (both): `{ status: "error", code, message }` with 400 `bad_request`, 404 `unknown_provider`, 429 `limit`, 502 `provider_error`
+  (the provider's exact message), 503 `no_provider` / `provider_unavailable`.
+- Cache in D1: result lists 24 h (2 h if empty; not kept when a provider failed), files 30 days. Usage per key and hour
+  (`subtitle_usage`, 35 days) -> charts for 24 h / 7 d / 30 d on the admin's Subtitles page.
