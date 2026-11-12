@@ -54,7 +54,7 @@ npx wrangler secret put SETUP_KEY        # any long random text; used once to cr
 npx wrangler secret put TMDB_API_KEY     # optional: trailers + recommendations
 npx wrangler secret put YOUTUBE_API_KEY  # optional: trailer fallback
 npx wrangler secret put FOOTBALL_KEYS    # optional: [{"url":"https://v3.football.api-sports.io","host":"v3.football.api-sports.io","key":"..."}]
-npx wrangler secret put SUBTITLES_TARGET # optional: base64 of the real subtitle host
+# subtitles: no secret; add the providers' keys in the admin page > Subtitles
 npx wrangler deploy                      # prints https://iptv-lists.<you>.workers.dev
 ```
 
@@ -92,6 +92,14 @@ in Cloudflare's cache (by list version), which saves D1 reads; on `*.workers.dev
   its test shows "Key accepted" and the quota from its headers. Keys are tried in order; on an error or a limit the
   next one is used. "Calls" counts requests made through this Worker. While the table is empty the Worker uses the
   `FOOTBALL_KEYS` secret (the page offers to copy those keys in).
+- **Subtitles**: `/fetchSubtitles` asks every provider that is on at the same time (Arabic first, then English, or
+  `languages: "ar,en,fr"`), `/downloadSubtitle?url=<a result's url>` returns the file as UTF-8 text (zips opened,
+  Windows-1256 / 1252 converted). One file per provider in `src/subtitles/` with the same functions
+  (`search`, `download`, `test`): SubDL, SubSource, OpenSubtitles.com, Wyzie Subs, Jimaku (anime) need a free key;
+  OpenSubtitles through Stremio's add-on and Gestdown (Addic7ed, TV) need none. Keys are in D1 (`subtitle_keys`),
+  managed on the Subtitles page (add / edit / test / on-off, several keys per provider used in order), and never sent
+  to players: results carry `sub:<provider>:<id>` tokens. The page also turns providers on/off, orders them and runs a
+  test search with each provider's own answer or error.
 - **Links for users**: server address, M3U, EPG, and per user the full message.
 - **Settings**: public address, admins, change password.
 

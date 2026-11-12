@@ -980,49 +980,118 @@ function editFootballKey(k) {
 }
 
 
-// ---- subtitles test: the same search players make, with the exact error
-const Sub = { type: "movie", name: "", year: "", tmdb: "", season: "1", episode: "1", last: null, dl: {} };
+// ---- subtitles: providers (one file each on the Worker: src/subtitles/*.js), their API keys (D1), and a test search
+const Sub = { type: "movie", name: "", year: "", tmdb: "", season: "1", episode: "1", langs: "ar,en", last: null, dl: {}, data: null };
+const subTestCell = (k) => k.test_ok === null || k.test_ok === undefined ? '<span class="dot"></span><span class="muted small">Not tested</span>'
+  : `<span class="dot ${k.test_ok ? "up" : "down"}"></span><span class="small" title="${esc(k.tested ? new Date(k.tested * 1000).toLocaleString() : "")}">${esc(k.test_note || (k.test_ok ? "OK" : "Failed"))}</span>`;
 function subResult(r) {
   if (!r) return "";
-  const row = (k, v) => v === undefined || v === "" || v === null ? "" : `<tr><td class="muted small" style="width:150px">${esc(k)}</td><td class="mono small" style="word-break:break-all">${esc(v)}</td></tr>`;
-  const head = r.ok && !r.warning ? `<div class="banner ok"><span class="badge ok">Works</span><span>${r.count} subtitle${r.count === 1 ? "" : "s"} found in ${r.ms} ms.</span></div>`
-    : r.ok ? `<div class="banner warn"><span class="badge warn">Works, nothing found</span><span>${esc(r.warning)}</span></div>`
-    : `<div class="banner err"><span class="badge err">Error</span><span>${esc(r.error || "Failed")}</span></div>`;
+  if (r.error && !r.providers) return `<div class="banner err"><span class="badge err">Error</span><span>${esc(r.error)}</span></div>`;
   const subs = r.subtitles || [];
-  return `${head}
-    <div class="tbl"><table><tbody>
-      ${row("Subtitle domain", r.domain)}${row("Server really asked", r.target + (r.viaSecret ? " (from the SUBTITLES_TARGET secret)" : ""))}
-      ${row("Address", r.url)}${row("Sent", r.sent ? JSON.stringify(r.sent) : "")}
-      ${row("Status", r.status !== undefined ? `${r.status} ${r.statusText || ""}` : "")}${row("Time", r.ms !== undefined ? r.ms + " ms" : "")}
-      ${row("Content type", r.contentType)}${row("Server's answer", r.body)}
+  const q = r.q || {};
+  return `
+    <div class="${subs.length ? "banner ok" : "banner warn"}"><span class="badge ${subs.length ? "ok" : "warn"}">${subs.length ? "Works" : "Nothing found"}</span>
+      <span>${subs.length} subtitle${subs.length === 1 ? "" : "s"} in ${r.ms} ms · searched as <b>${esc(q.title || "")}</b>${q.year ? " (" + esc(q.year) + ")" : ""}${q.season ? ` S${esc(q.season)}E${esc(q.episode)}` : ""} · TMDB ${esc(q.tmdb || "–")} · IMDb ${esc(q.imdb || "–")} · ${esc((q.langs || []).join(", "))}</span></div>
+    <div class="tbl"><table><thead><tr><th>Provider</th><th class="num">Found</th><th class="num hide-sm">Time</th><th>Result</th></tr></thead><tbody>
+      ${(r.providers || []).map((p) => `<tr><td>${esc(p.name)}</td><td class="num">${p.count}</td><td class="num hide-sm">${p.ms} ms</td>
+        <td>${p.ok ? '<span class="dot up"></span><span class="small">OK</span>' : `<span class="dot down"></span><span class="small">${esc(p.error)}</span>`}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No provider is on.</td></tr>'}
     </tbody></table></div>
-    ${subs.length ? `<h2 style="margin-top:18px">Subtitles found</h2><div class="tbl"><table><thead><tr><th>Name</th><th class="hide-sm">Language</th><th></th></tr></thead><tbody>
-      ${subs.map((x, i) => { const u = x.url || x.link || x.download || x.file || ""; const d = Sub.dl[i];
-        return `<tr><td><div class="name">${esc(x.name || x.title || x.release || x.filename || ("Subtitle " + (i + 1)))}</div><div class="sub mono">${esc(u)}</div>
-          ${d ? `<div class="small" style="margin-top:4px;color:var(${d.ok && !d.warning ? "--ok" : d.ok ? "--warn" : "--err"})">${esc(d.ok ? (d.warning || `Downloaded ${d.bytes} characters in ${d.ms} ms`) : d.error)}${d.status ? ` (HTTP ${d.status})` : ""}</div>${d.body && d.ok ? `<pre class="share" style="margin-top:6px;max-height:140px;overflow:auto">${esc(d.body.slice(0, 600))}</pre>` : ""}` : ""}</td>
-          <td class="hide-sm">${esc(x.lang || x.language || x.langage || "")}</td>
-          <td class="act">${u ? `<button class="ghost small" data-dl="${i}">Test download</button>` : ""}</td></tr>`; }).join("")}
+    ${subs.length ? `<h2 style="margin-top:18px">Subtitles found</h2><div class="tbl"><table><thead><tr><th>Name</th><th>Language</th><th class="hide-sm">Provider</th><th></th></tr></thead><tbody>
+      ${subs.map((x, i) => { const d = Sub.dl[i];
+        return `<tr><td><div class="name">${esc(x.name)}${x.hi ? ' <span class="badge">HI</span>' : ""}</div>${x.by ? `<div class="sub">${esc(x.by)}</div>` : ""}
+          ${d ? `<div class="small" style="margin-top:4px;color:var(${d.ok ? "--ok" : "--err"})">${esc(d.ok ? `Downloaded in ${d.ms} ms: ${d.name} · ${d.lines} lines · ${d.chars} characters (UTF-8)` : d.error)}</div>${d.ok ? `<pre class="share" dir="auto" style="margin-top:6px;max-height:160px;overflow:auto">${esc(d.preview.slice(0, 700))}</pre>` : ""}` : ""}</td>
+          <td>${esc(x.language || x.lang)}</td><td class="hide-sm small">${esc(x.providerName || x.provider)}</td>
+          <td class="act"><button class="ghost small" data-dl="${i}">Test download</button></td></tr>`; }).join("")}
     </tbody></table></div>` : ""}`;
 }
 Views.subtitles = async () => {
-  const [vod, series] = await Promise.all([Data.streams("vod"), Data.streams("series")]);
+  const [data, vod, series] = await Promise.all([API.get("subtitles"), Data.streams("vod"), Data.streams("series")]);
+  Sub.data = data;
   const pick = (Sub.type === "series" ? series : vod).slice(0, 2000);
+  const pn = Object.fromEntries(data.providers.map((p) => [p.id, p.name]));
+  const keyed = data.providers.filter((p) => p.needsKey);
   return `
-  <div class="head"><div class="grow"><h1>Subtitles</h1><p>Test the subtitle search the players use (Arabic), for a movie or a series episode. Errors are shown exactly as the server gives them.</p></div></div>
-  <div class="card">
+  <div class="head"><div class="grow"><h1>Subtitles</h1><p>Players search every provider that is on, at the same time; Arabic first. Keys stay on the server: players never see them.</p></div>
+    <button class="ghost" id="sk-testall" ${data.keys.length ? "" : "disabled"}>${icon("pulse")}Test all keys</button>
+    <button id="sk-add">${icon("plus")}Add key</button></div>
+
+  <div class="card flush"><div class="toolbar"><b>Providers</b><span class="muted small">Order = order of the results. A provider that needs a key works once it has one.</span></div>
+    <div class="tbl"><table><thead><tr><th>Provider</th><th class="hide-sm">Key</th><th>State</th><th></th></tr></thead><tbody>
+    ${data.providers.map((p, i) => `<tr class="${p.on ? "" : "off"}">
+      <td><div class="name">${esc(p.name)}</div><div class="sub"><a href="${esc(p.site)}" target="_blank" rel="noopener">${esc(p.site.replace(/^https?:\/\//, "").replace(/\/$/, ""))}</a>${p.kinds.length === 1 ? " · TV only" : ""}</div></td>
+      <td class="hide-sm small">${p.needsKey ? `${p.liveKeys} key${p.liveKeys === 1 ? "" : "s"} on${p.keys > p.liveKeys ? ` (${p.keys - p.liveKeys} off)` : ""}` : '<span class="muted">No key needed</span>'}</td>
+      <td id="sp-t-${p.id}">${!p.on ? '<span class="badge err">Off</span>' : p.usable ? '<span class="badge ok">On</span>' : '<span class="badge warn">Needs a key</span>'}</td>
+      <td class="act">
+        <button class="ghost small" data-sp-test="${p.id}" ${p.needsKey && !p.liveKeys ? "disabled" : ""}>${icon("pulse")}Test</button>
+        <button class="icon" title="Move up" aria-label="Move up" data-sp-up="${p.id}" ${i ? "" : "disabled"}>▲</button>
+        <button class="icon" title="${p.on ? "Turn off" : "Turn on"}" aria-label="${p.on ? "Turn off" : "Turn on"}" data-sp-toggle="${p.id}">${icon("power")}</button>
+        ${p.needsKey ? `<button class="ghost small" data-sp-key="${p.id}">${icon("plus")}Key</button>` : ""}</td>
+    </tr>`).join("")}</tbody></table></div></div>
+
+  <div class="card flush" style="margin-top:16px"><div class="toolbar"><b>API keys</b><span class="muted small">Several keys for one provider: used in order, the next one when a key is refused or over its limit.</span></div>
+    ${data.keys.length ? `<div class="tbl"><table><thead><tr><th>Key</th><th class="hide-sm">Provider</th><th>Last test</th><th class="num hide-sm">Calls</th><th></th></tr></thead><tbody>
+    ${data.keys.map((k) => `<tr class="${k.enabled ? "" : "off"}">
+      <td><div class="name">${esc(k.label || pn[k.provider] + " key")}${k.enabled ? "" : ' <span class="badge err">Off</span>'}</div><div class="sub mono">${esc(maskKey(k.key))}${k.note ? " · " + esc(k.note) : ""}</div></td>
+      <td class="hide-sm">${esc(pn[k.provider] || k.provider)}</td>
+      <td id="sk-t-${k.id}">${subTestCell(k)}</td>
+      <td class="num hide-sm" title="${k.last_used ? "Last: " + esc(new Date(k.last_used * 1000).toLocaleString()) : ""}">${k.used || 0}</td>
+      <td class="act"><button class="ghost small" data-sk-test="${k.id}">${icon("pulse")}Test</button>
+        <button class="icon" title="${k.enabled ? "Turn off" : "Turn on"}" aria-label="${k.enabled ? "Turn off" : "Turn on"}" data-sk-toggle="${k.id}">${icon("power")}</button>
+        <button class="icon" title="Edit" aria-label="Edit" data-sk-edit="${k.id}">${icon("edit")}</button>
+        <button class="icon" title="Delete" aria-label="Delete" data-sk-del="${k.id}">${icon("trash")}</button></td>
+    </tr>`).join("")}</tbody></table></div>` : `<div class="empty">No keys yet. ${keyed.map((p) => esc(p.name)).join(", ")} need one.</div>`}</div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Test a search</h2><p class="small muted" style="margin-bottom:12px">The same search the players make. Each provider's own answer or error is shown.</p>
     <div class="tabs" style="margin-bottom:14px"><button type="button" data-st="movie" class="${Sub.type === "movie" ? "on" : ""}">Movie</button><button type="button" data-st="series" class="${Sub.type === "series" ? "on" : ""}">Series</button></div>
     ${pick.length ? `<div class="field"><label class="f" for="sb-pick">From ${esc(curList().name)} (optional)</label><select id="sb-pick"><option value="">Choose a ${Sub.type === "series" ? "series" : "movie"}</option>${pick.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select></div>` : ""}
     <div class="cols"><div class="field"><label class="f" for="sb-name">${Sub.type === "series" ? "Series name" : "Movie name"}</label><input id="sb-name" required value="${esc(Sub.name)}" placeholder="${Sub.type === "series" ? "Breaking Bad" : "Inception"}"></div>
       <div class="field"><label class="f" for="sb-tmdb">TMDB ID (optional)</label><input id="sb-tmdb" class="mono" value="${esc(Sub.tmdb)}"></div></div>
-    ${Sub.type === "series"
-      ? `<div class="cols"><div class="field"><label class="f" for="sb-season">Season</label><input id="sb-season" type="number" min="1" value="${esc(Sub.season)}"></div><div class="field"><label class="f" for="sb-ep">Episode</label><input id="sb-ep" type="number" min="1" value="${esc(Sub.episode)}"></div></div>`
-      : `<div class="field" style="max-width:200px"><label class="f" for="sb-year">Year (optional)</label><input id="sb-year" inputmode="numeric" value="${esc(Sub.year)}"></div>`}
-    <button id="sb-go">${icon("cc")}Test subtitles</button>
+    <div class="cols">
+      ${Sub.type === "series"
+        ? `<div class="field"><label class="f" for="sb-season">Season</label><input id="sb-season" type="number" min="1" value="${esc(Sub.season)}"></div><div class="field"><label class="f" for="sb-ep">Episode</label><input id="sb-ep" type="number" min="1" value="${esc(Sub.episode)}"></div>`
+        : `<div class="field"><label class="f" for="sb-year">Year (optional)</label><input id="sb-year" inputmode="numeric" value="${esc(Sub.year)}"></div>`}
+      <div class="field"><label class="f" for="sb-langs">Languages (in order)</label><input id="sb-langs" class="mono" value="${esc(Sub.langs)}" placeholder="ar,en"></div></div>
+    <button id="sb-go">${icon("cc")}Search subtitles</button>
   </div>
   <div class="card" id="sb-out" ${Sub.last ? "" : "hidden"}>${subResult(Sub.last)}</div>`;
 };
 Views.subtitles.bind = () => {
-  const read = () => { Sub.name = $("#sb-name").value.trim(); Sub.tmdb = $("#sb-tmdb").value.trim();
+  const data = Sub.data;
+  const findKey = (id) => data.keys.find((k) => String(k.id) === String(id));
+  const keyBody = (k, extra) => ({ provider: k.provider, label: k.label, key: k.key, note: k.note, enabled: !!k.enabled, ord: k.ord, ...extra });
+  const busy = async (b, fn) => { b.disabled = true; try { await fn(); } catch (e) { fail(e); b.disabled = false; } };
+  $("#sk-add").onclick = () => editSubKey();
+  $("#sk-testall").onclick = () => busy($("#sk-testall"), async () => { const r = await API.post("subtitle-keys/test-all"); const bad = r.filter((x) => !x.ok).length; toast(bad ? `${bad} of ${r.length} keys failed` : `All ${r.length} keys work`, bad ? "err" : "ok"); render(); });
+  document.querySelectorAll("[data-sp-key]").forEach((b) => b.onclick = () => editSubKey(null, b.dataset.spKey));
+  document.querySelectorAll("[data-sp-test]").forEach((b) => b.onclick = () => busy(b, async () => {
+    const cell = $("#sp-t-" + b.dataset.spTest); cell.innerHTML = '<span class="muted small">Testing…</span>';
+    const r = await API.post("subtitles/providers/" + b.dataset.spTest); cell.innerHTML = `<span class="dot ${r.ok ? "up" : "down"}"></span><span class="small">${esc(r.note)}</span>`; b.disabled = false;
+  }));
+  const saveProv = (p, extra) => API.put("subtitles/providers/" + p.id, { on: p.on, ord: p.ord, ...extra });
+  document.querySelectorAll("[data-sp-toggle]").forEach((b) => b.onclick = () => busy(b, async () => { const p = data.providers.find((x) => x.id === b.dataset.spToggle); await saveProv(p, { on: !p.on }); render(); }));
+  document.querySelectorAll("[data-sp-up]").forEach((b) => b.onclick = () => busy(b, async () => {
+    const order = data.providers.slice(); const i = order.findIndex((x) => x.id === b.dataset.spUp); if (i < 1) return;
+    [order[i - 1], order[i]] = [order[i], order[i - 1]];
+    for (let n = 0; n < order.length; n++) await saveProv(order[n], { ord: n });
+    render();
+  }));
+  document.querySelectorAll("[data-sk-test]").forEach((b) => b.onclick = () => busy(b, async () => {
+    const cell = $("#sk-t-" + b.dataset.skTest); cell.innerHTML = '<span class="muted small">Testing…</span>';
+    const r = await API.post(`subtitle-keys/${b.dataset.skTest}/test`); const k = findKey(r.id);
+    Object.assign(k, { test_ok: r.ok, test_note: r.note, tested: Math.floor(Date.now() / 1000) }); cell.innerHTML = subTestCell(k); b.disabled = false;
+  }));
+  document.querySelectorAll("[data-sk-toggle]").forEach((b) => b.onclick = () => busy(b, async () => { const k = findKey(b.dataset.skToggle); await API.put("subtitle-keys/" + k.id, keyBody(k, { enabled: !k.enabled })); render(); }));
+  document.querySelectorAll("[data-sk-edit]").forEach((b) => b.onclick = () => editSubKey(findKey(b.dataset.skEdit)));
+  document.querySelectorAll("[data-sk-del]").forEach((b) => b.onclick = () => {
+    const k = findKey(b.dataset.skDel);
+    Dlg.open("Delete key", `<p>Delete <b>${esc(k.label || k.provider)}</b> (<span class="mono">${esc(maskKey(k.key))}</span>)? This cannot be undone.</p>`, [{ label: "Cancel", cls: "ghost" }, { label: "Delete", cls: "danger", onClick: async () => {
+      await API.del("subtitle-keys/" + k.id); toast("Key deleted", "ok"); render();
+    } }]);
+  });
+
+  // test search
+  const read = () => { Sub.name = $("#sb-name").value.trim(); Sub.tmdb = $("#sb-tmdb").value.trim(); Sub.langs = $("#sb-langs").value.trim() || "ar,en";
     if ($("#sb-year")) Sub.year = $("#sb-year").value.trim(); if ($("#sb-season")) { Sub.season = $("#sb-season").value; Sub.episode = $("#sb-ep").value; } };
   document.querySelectorAll("[data-st]").forEach((b) => b.onclick = () => { read(); Sub.type = b.dataset.st; Sub.last = null; Sub.dl = {}; render(); });
   const pk = $("#sb-pick");
@@ -1033,19 +1102,47 @@ Views.subtitles.bind = () => {
   };
   const show = () => { const o = $("#sb-out"); o.hidden = false; o.innerHTML = subResult(Sub.last); bindDl(); };
   const bindDl = () => document.querySelectorAll("[data-dl]").forEach((b) => b.onclick = async () => {
-    const i = +b.dataset.dl; const x = Sub.last.subtitles[i]; b.disabled = true; b.textContent = "Testing…";
-    try { Sub.dl[i] = await API.post("subtitles-test", { download: x.url || x.link || x.download || x.file }); } catch (e) { Sub.dl[i] = { ok: false, error: e.message }; }
+    const i = +b.dataset.dl; b.disabled = true; b.textContent = "Downloading…";
+    try { Sub.dl[i] = await API.post("subtitles-test", { download: Sub.last.subtitles[i].url }); } catch (e) { Sub.dl[i] = { ok: false, error: e.message }; }
     show();
   });
   $("#sb-go").onclick = async () => {
     read(); if (!Sub.name) { $("#sb-name").reportValidity(); return; }
-    const b = $("#sb-go"); b.disabled = true; b.innerHTML = `${icon("cc")}Testing…`;
-    try { Sub.last = await API.post("subtitles-test", { type: Sub.type, name: Sub.name, year: Sub.year, tmdb_id: Sub.tmdb, season: Sub.season, episode: Sub.episode }); }
-    catch (e) { Sub.last = { ok: false, error: e.message }; }
-    Sub.dl = {}; b.disabled = false; b.innerHTML = `${icon("cc")}Test subtitles`; show();
+    const b = $("#sb-go"); b.disabled = true; b.innerHTML = `${icon("cc")}Searching…`;
+    try { Sub.last = await API.post("subtitles-test", { type: Sub.type, name: Sub.name, year: Sub.year, tmdb_id: Sub.tmdb, season: Sub.season, episode: Sub.episode, languages: Sub.langs }); }
+    catch (e) { Sub.last = { error: e.message }; }
+    Sub.dl = {}; b.disabled = false; b.innerHTML = `${icon("cc")}Search subtitles`; show();
   };
   bindDl();
 };
+function editSubKey(k, provider) {
+  const isNew = !k; const keyed = Sub.data.providers.filter((p) => p.needsKey);
+  const prov = k ? k.provider : provider || keyed[0].id;
+  const site = (id) => (keyed.find((p) => p.id === id) || {}).site || "";
+  Dlg.open(isNew ? "Add subtitle API key" : "Edit subtitle API key", `
+    <div class="cols">
+      <div class="field"><label class="f" for="sk-prov">Provider</label><select id="sk-prov">${keyed.map((p) => `<option value="${p.id}" ${p.id === prov ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+      <div class="field"><label class="f" for="sk-label">Name (only for you)</label><input id="sk-label" maxlength="60" value="${esc(k ? k.label : "")}" placeholder="My account"></div>
+    </div>
+    <div class="field"><label class="f" for="sk-key">API key</label><input id="sk-key" class="mono" required maxlength="300" autocomplete="off" spellcheck="false" value="${esc(k ? k.key : "")}">
+      <p class="small muted" style="margin-top:6px">Get it at <a id="sk-site" href="${esc(site(prov))}" target="_blank" rel="noopener">${esc(site(prov))}</a></p></div>
+    <div class="field"><label class="f" for="sk-note">Note</label><input id="sk-note" maxlength="200" value="${esc(k ? k.note || "" : "")}"></div>
+    <label class="row small"><input type="checkbox" id="sk-on" ${!k || k.enabled ? "checked" : ""}> On (used by the players' searches)</label>
+    <div class="row" style="margin-top:14px"><button type="button" class="ghost small" id="sk-try">${icon("pulse")}Test this key</button><span class="small" id="sk-res"></span></div>`,
+    [{ label: "Cancel", cls: "ghost" }, { label: isNew ? "Add key" : "Save", onClick: async () => {
+      const d = read();
+      if (isNew) await API.post("subtitle-keys", d); else await API.put("subtitle-keys/" + k.id, { ...d, ord: k.ord });
+      toast(isNew ? "Key added" : "Key saved", "ok"); render();
+    } }]);
+  const read = () => ({ provider: $("#sk-prov").value, label: $("#sk-label").value.trim(), key: $("#sk-key").value.trim(), note: $("#sk-note").value.trim(), enabled: $("#sk-on").checked });
+  $("#sk-prov").onchange = () => { const s = site($("#sk-prov").value); $("#sk-site").href = s; $("#sk-site").textContent = s; $("#sk-res").textContent = ""; };
+  $("#sk-try").onclick = async () => {
+    const d = read(); if (!d.key) { $("#sk-key").reportValidity(); return; }
+    const b = $("#sk-try"); b.disabled = true; $("#sk-res").innerHTML = '<span class="muted">Testing…</span>';
+    try { const r = await API.post("subtitle-keys/test", d); $("#sk-res").innerHTML = `<span class="dot ${r.ok ? "up" : "down"}"></span>${esc(r.note)}`; }
+    catch (e) { $("#sk-res").textContent = e.message; } finally { b.disabled = false; }
+  };
+}
 
 // ---------------------------------------------------------------- shell
 let searchTimer = 0;

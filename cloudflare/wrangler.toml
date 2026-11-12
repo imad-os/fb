@@ -12,6 +12,7 @@ migrations_dir = "migrations"
 [vars]
 # Who may call the admin API from a browser (the GitHub Pages address). Comma separated. "*" = anyone.
 ADMIN_ORIGINS = "https://imad-os.github.io,http://127.0.0.1:8000,http://localhost:8000"
+# Not used any more: subtitles come from the providers in src/subtitles/ (keys in the admin page > Subtitles).
 SUBTITLES_DOMAIN = "exoapp.tv"
 
 # Secrets (npx wrangler secret put NAME):
@@ -19,4 +20,4 @@ SUBTITLES_DOMAIN = "exoapp.tv"
 #   TMDB_API_KEY       trailers + recommendations
 #   YOUTUBE_API_KEY    trailer fallback
 #   FOOTBALL_KEYS      JSON: [{"url":"https://v3.football.api-sports.io","host":"v3.football.api-sports.io","key":"..."}]
-#   SUBTITLES_TARGET   base64 of the real subtitle host
+#   SUBTITLES_TARGET   (old, not used any more)
