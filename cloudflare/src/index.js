@@ -3,12 +3,10 @@
 //   /xtream/...            the same, older addresses
 //   /api/...               admin API (the admin page on GitHub Pages)
 //   /footballRequest ...   the helper APIs of the Firebase version, same paths
-//   /gdrive/<id>/<name>?t= a Google Drive file for the TV's own player (My PC adds the sign-in; see src/gdrive.js)
 import { json } from "./util.js";
 import { handleXtream } from "./xtream.js";
 import { handleAdmin } from "./admin.js";
 import { handleService, SERVICE_ROUTES } from "./services.js";
-import { handleGdrive } from "./gdrive.js";
 
 function cors(request, env, admin) {
   const origin = request.headers.get("origin") || "";
@@ -38,7 +36,6 @@ export default {
     let res;
     try {
       if (admin) res = await handleAdmin(request, env, url);
-      else if (first === "gdrive") res = await handleGdrive(request, url);
       else if (first === "xtream") res = await handleXtream(request, env, ctx);
       else if (SERVICE_ROUTES.includes(first)) res = await handleService(first, request, env);
       else if (first === "") res = json({ name: "iptv-lists", ok: true });
